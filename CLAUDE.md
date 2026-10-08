@@ -45,9 +45,14 @@ make gateway mock    # build+deploy gateway / mock-llm
 make smoke           # chat completion through the gateway
 make loadgen         # run load through the gateway
 make ui              # port-forward Grafana, Prometheus, Jaeger and print URLs
-make test lint       # pytest + ruff + yamllint + kubeconform + promtool
+make test lint       # pytest + ruff + yamllint + kubeconform
+make slo-gen slo-check slo slo-demo slo-status   # generate rules from slo/slos.yaml, promtool, apply, inspect
+make verify-telemetry                            # PromQL for every signal + a Jaeger trace
 make break-latency | break-errors | break-quality | heal
 ```
+
+Never edit slo/rules*.yaml or slo/prometheus/*.yaml by hand: change slo/slos.yaml and run
+`make slo-gen`.
 
 ## Environment notes (this machine)
 

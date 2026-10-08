@@ -1,0 +1,66 @@
+---
+# promtool unit tests for the PRODUCTION rules (30-day SLO, Workbook windows).
+rule_files:
+  - ../prometheus/rules.yaml
+evaluation_interval: 1m
+
+tests:
+  # Availability: 16 req/min, 50% errors from t=60m to t=180m, then clean. Page fires on
+  # 1h/5m once both windows exceed 14.4x; it resolves after the 6h/30m pair drains.
+  - interval: 1m
+    input_series:
+      - series: 'llm_slo_requests_total{llm_slo_outcome="success"}'
+        values: "0+16x600"
+      - series: 'llm_slo_requests_total{llm_slo_outcome="upstream_error"}'
+        values: "0x60 0+16x120 1920x420"
+    promql_expr_test:
+      - expr: 'slo:burn_rate:rate5m{sli="availability"}'
+        eval_time: 90m
+        exp_samples:
+          - labels: 'slo:burn_rate:rate5m{sli="availability", slo_mode="prod", slo_profile="cpu"}'
+            value: 50
+      - expr: 'slo:error_budget_remaining:ratio{sli="availability"}'
+        eval_time: 30m
+        exp_samples:
+          - labels: 'slo:error_budget_remaining:ratio{sli="availability", slo_mode="prod", slo_profile="cpu"}'
+            value: 1
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: LLMAvailabilityBurnRatePage
+        exp_alerts: []
+      - eval_time: 62m  # 2 minutes of errors: the 5m window burns but the 1h window does not yet
+        alertname: LLMAvailabilityBurnRatePage
+        exp_alerts: []
+      - eval_time: 130m  # the 1h page window is fully inside the error period (60m..180m)
+        alertname: LLMAvailabilityBurnRatePage
+        exp_alerts:
+          - exp_labels:
+              severity: page
+              sli: availability
+              slo_mode: prod
+              slo_profile: cpu
+            exp_annotations:
+              summary: "availability SLO (99%) is burning error budget at 50.0x"
+              description: >-
+                Windows 1h/5m at 14.4x or 6h/30m at 6x (prod windows). A request is good when the
+                gateway returns a non-error, non-empty, non-truncated response. Upstream errors,
+                timeouts, empty bodies, truncation at max_tokens and injected faults are bad events.
+              runbook: docs/framework.md
+      - eval_time: 600m  # 7 hours after the errors stopped
+        alertname: LLMAvailabilityBurnRatePage
+        exp_alerts: []
+
+  # A healthy service with a 0.5% error ratio (half the 99% budget) must never page.
+  - interval: 1m
+    input_series:
+      - series: 'llm_slo_requests_total{llm_slo_outcome="success"}'
+        values: "0+199x600"
+      - series: 'llm_slo_requests_total{llm_slo_outcome="timeout"}'
+        values: "0+1x600"
+    alert_rule_test:
+      - eval_time: 400m
+        alertname: LLMAvailabilityBurnRatePage
+        exp_alerts: []
+      - eval_time: 400m
+        alertname: LLMAvailabilityBurnRateTicket
+        exp_alerts: []

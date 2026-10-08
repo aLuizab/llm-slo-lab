@@ -64,6 +64,26 @@ loadgen: ## Run load through the gateway (CONCURRENCY, DURATION or RAMP=1:60,4:1
 verify-telemetry: ## Print PromQL results for every SLI signal and one Jaeger trace
 	@scripts/verify-telemetry.sh
 
+# ---------------------------------------------------------------- SLOs
+.PHONY: slo-gen slo-check slo slo-demo slo-status
+
+slo-gen: ## Generate slo/rules*.yaml and slo/prometheus/*.yaml from slo/slos.yaml
+	cd slo && uv run --frozen python gen_rules.py
+
+slo-check: ## promtool check + unit tests, and fail if generated rules are stale
+	cd slo && uv run --frozen python gen_rules.py --check
+	promtool check rules slo/prometheus/rules.yaml slo/prometheus/rules-demo.yaml
+	promtool test rules slo/tests/*.test.yaml
+
+slo: ## Apply the production PrometheusRule (30-day windows)
+	kubectl apply -f slo/rules.yaml
+
+slo-demo: ## Apply the DEMO PrometheusRule (compressed windows; alerts fire within minutes)
+	kubectl apply -f slo/rules-demo.yaml
+
+slo-status: ## Show rule groups and active alerts from Prometheus
+	@scripts/slo-status.sh
+
 # ---------------------------------------------------------------- model
 model-cache: ## Create the model-cache PV/PVC and download the weights into it (idempotent)
 	kubectl apply -f model/namespace.yaml -f model/model-cache.yaml

@@ -299,3 +299,34 @@ second request includes the first one's generation. At concurrency 2 TTFT p50 we
 to 6.5 s (p95 14.8 s). The predictor is effectively a one-request-at-a-time server, which is why
 the KEDA signal is in-flight requests per replica and why the healthy baseline load is
 concurrency 1 per replica.
+
+## ADR-016: SLOs, recording rules and burn-rate alerts are generated from one spec
+
+**Status:** Accepted (2026-10-08)
+
+- `slo/slos.yaml` is the single, human-readable source of truth (OpenSLO-inspired, not
+  conformant): SLIs as good/total PromQL with `{window}` placeholders, objectives, hardware
+  profiles (CPU vs GPU thresholds), burn-rate pairs and two *modes*. `slo/gen_rules.py`
+  renders a PrometheusRule for production windows, a clearly labelled demo PrometheusRule with
+  compressed windows (`slodemo:` metric prefix, `...Demo` alert names, `slo_mode=demo`), and
+  plain rule files for promtool. CI fails if the generated files are stale.
+- Recording rules per SLI and window: `slo:sli_error:ratio_rate<W>`, `slo:burn_rate:rate<W>`
+  (= error ratio / (1 − objective)), `slo:objective:ratio`, `slo:error_budget_remaining:ratio`
+  (over the 30-day budget window; 1 h in demo mode) and `slo:cost_per_1k_requests:rate<W>`.
+- Alerts follow the Google SRE Workbook multi-window, multi-burn-rate pattern: page on
+  1h/5m at 14.4× or 6h/30m at 6×, ticket on 1d/2h at 3× or 3d/6h at 1×. **Exception, and
+  the reason it is in the spec rather than hidden in code:** a burn rate above
+  1/(1 − objective) is impossible (it would need more than 100% bad events). For the 90%
+  objectives (throughput, quality) the budget is 10%, so 14.4× cannot happen; those two SLOs
+  page at 8×/5× instead. 99% availability and 95% responsiveness keep the Workbook factors.
+- Thresholds are histogram bucket boundaries (`le="2"`, `le="3"`), so changing a threshold
+  means picking another bucket or changing the gateway's buckets, which the spec says.
+- Demo windows: 5m→1m, 30m→2m, 1h→3m, 2h→3m, 6h→6m, 1d→10m, 3d→20m, `for: 0m`, group
+  interval 15 s. A 1-minute window pages on noise; the file says "DEMO ONLY" for a reason.
+- `promtool test rules` covers each SLI's page alert firing and resolving, the ticket alert,
+  the cost budget, the healthy-service case and the production 1h/5m pair.
+- Observed right after loading: the *production* rules fired `LLMAvailabilityBurnRatePage`
+  (20×) and `LLMResponsivenessBurnRatePage` (6.7×) on the lab's own history of the last hour:
+  the concurrency-2 load test (TTFT 6–30 s) and the truncated answers at `max_tokens=64`. The
+  error budget went negative because the "30-day" window held one hour of data with a bad
+  half hour in it. Nothing was tuned to make this happen.

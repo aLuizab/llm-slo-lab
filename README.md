@@ -20,7 +20,7 @@ Português (Brasil): [docs/pt-br/README.md](docs/pt-br/README.md)
 | 1 | kind cluster, cert-manager, KServe Standard mode, Qwen2.5-0.5B on CPU | done |
 | 2 | mock-llm and llm-gateway (OTel GenAI metrics, traces, cost, fault injection) | done |
 | 3 | kube-prometheus-stack, OpenTelemetry Collector, Jaeger | done |
-| 4 | SLIs, SLOs, recording rules, burn-rate alerts, promtool tests | pending |
+| 4 | SLIs, SLOs, recording rules, burn-rate alerts, promtool tests | done |
 | 5 | Quality signal: golden dataset and evaluator CronJob | pending |
 | 6 | KEDA autoscaling on in-flight requests | pending |
 | 7 | Chaos toggles | pending |
@@ -101,6 +101,27 @@ failure from the user's point of view. Fault injection (`FAULT_ERROR_RATE`,
 `FAULT_EXTRA_LATENCY_MS`) and the system prompt come from ConfigMaps so the chaos toggles can
 flip them. Requests may carry `x-mock-*` headers, which the gateway forwards to `mock-llm`
 (the real model ignores them).
+
+## SLOs and alerts
+
+[slo/slos.yaml](slo/slos.yaml) is the source of truth; `make slo-gen` renders the rules.
+
+| SLI | Good event | Objective (30 d) | Page at |
+|---|---|---|---|
+| Availability | `llm_slo_outcome="success"` (no error, timeout, empty or truncated response) | 99 % | 1h/5m 14.4×, 6h/30m 6× |
+| Responsiveness | TTFT < 2 s on CPU (0.5 s on GPU) | 95 % | 1h/5m 14.4×, 6h/30m 6× |
+| Throughput | > 3 output tokens/s on CPU (20 on GPU) | 90 % | 1h/5m 8×, 6h/30m 5× |
+| Quality | evaluator checks passing | 90 % | 1h/5m 8×, 6h/30m 5× |
+| Cost | amortized cost per 1k requests within budget (1.5 notional USD) | budget, not SLO | ticket only |
+
+Tickets open at 1d/2h 3× and 3d/6h 1×. Why 8×/5× for the 90 % objectives: a burn rate can
+never exceed 1/(1 − objective), and 14.4 × 10 % would be 144 % bad events. Recording rules
+exist for 5m, 30m, 1h, 2h, 6h, 1d, 3d plus the 30-day error budget (`slo:` prefix).
+
+`slo/rules-demo.yaml` is the same logic with windows compressed to 1m…20m (`slodemo:` prefix,
+`…Demo` alert names) so that a toggle pages during a 5-minute talk. It is **demo only**.
+`make slo-check` runs `promtool check rules` and the unit tests in `slo/tests/`;
+`make slo-status` shows rule health, burn rates and firing alerts.
 
 ## Cost assumptions
 

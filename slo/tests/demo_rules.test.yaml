@@ -1,0 +1,175 @@
+---
+# promtool unit tests for the DEMO rules (compressed windows). Each case drives one SLI bad,
+# checks that its page alert fires, and that it resolves once the signal recovers.
+rule_files:
+  - ../prometheus/rules-demo.yaml
+evaluation_interval: 15s
+
+tests:
+  # ---------------------------------------------------------------- availability
+  # 4 requests / 15 s. From t=10m half of them fail (injected errors); from t=30m they stop.
+  - interval: 15s
+    input_series:
+      - series: 'llm_slo_requests_total{llm_slo_outcome="success"}'
+        values: "0+4x200"
+      - series: 'llm_slo_requests_total{llm_slo_outcome="injected_error"}'
+        values: "0x40 0+4x80 320x80"
+    promql_expr_test:
+      - expr: 'slodemo:sli_error:ratio_rate1m{sli="availability"}'
+        eval_time: 5m
+        exp_samples:
+          - labels: 'slodemo:sli_error:ratio_rate1m{sli="availability", slo_mode="demo", slo_profile="cpu"}'
+            value: 0
+      - expr: 'slodemo:burn_rate:rate3m{sli="availability"}'
+        eval_time: 20m
+        exp_samples:
+          - labels: 'slodemo:burn_rate:rate3m{sli="availability", slo_mode="demo", slo_profile="cpu"}'
+            value: 50  # 50% errors / 1% budget
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: LLMAvailabilityBurnRatePageDemo
+        exp_alerts: []
+      - eval_time: 20m
+        alertname: LLMAvailabilityBurnRatePageDemo
+        exp_alerts:
+          - exp_labels:
+              severity: page
+              sli: availability
+              slo_mode: demo
+              slo_profile: cpu
+            exp_annotations:
+              summary: "[DEMO] availability SLO (99%) is burning error budget at 50.0x"
+              description: >-
+                Windows 3m/1m at 14.4x or 6m/2m at 6x (demo windows). A request is good when the
+                gateway returns a non-error, non-empty, non-truncated response. Upstream errors,
+                timeouts, empty bodies, truncation at max_tokens and injected faults are bad events.
+              runbook: docs/framework.md
+      - eval_time: 25m  # the 10m ticket window is fully inside the error period
+        alertname: LLMAvailabilityBurnRateTicketDemo
+        exp_alerts:
+          - exp_labels:
+              severity: ticket
+              sli: availability
+              slo_mode: demo
+              slo_profile: cpu
+            exp_annotations:
+              summary: "[DEMO] availability SLO (99%) is burning error budget at 50.0x"
+              description: >-
+                Windows 10m/3m at 3x or 20m/6m at 1x (demo windows). A request is good when the
+                gateway returns a non-error, non-empty, non-truncated response. Upstream errors,
+                timeouts, empty bodies, truncation at max_tokens and injected faults are bad events.
+              runbook: docs/framework.md
+      - eval_time: 45m  # errors stopped at 30m; the longest page window (6m) has drained
+        alertname: LLMAvailabilityBurnRatePageDemo
+        exp_alerts: []
+
+  # ---------------------------------------------------------------- responsiveness
+  # TTFT: all requests below 2 s until t=10m, then none of them.
+  - interval: 15s
+    input_series:
+      - series: 'gen_ai_server_time_to_first_token_seconds_bucket{le="2"}'
+        values: "0+4x40 160x160"
+      - series: 'gen_ai_server_time_to_first_token_seconds_count'
+        values: "0+4x200"
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: LLMResponsivenessBurnRatePageDemo
+        exp_alerts: []
+      - eval_time: 20m
+        alertname: LLMResponsivenessBurnRatePageDemo
+        exp_alerts:
+          - exp_labels:
+              severity: page
+              sli: responsiveness
+              slo_mode: demo
+              slo_profile: cpu
+            exp_annotations:
+              summary: "[DEMO] responsiveness SLO (95%) is burning error budget at 20.0x"
+              description: >-
+                Windows 3m/1m at 14.4x or 6m/2m at 6x (demo windows). Time to first token below the
+                profile threshold. Only requests that produced a first token are counted here;
+                failures are already bad events for availability.
+              runbook: docs/framework.md
+
+  # ---------------------------------------------------------------- throughput
+  # tokens/s: all requests above 3 tok/s until t=10m, then all below (bucket le=3 == count).
+  - interval: 15s
+    input_series:
+      - series: 'llm_slo_output_tokens_per_second_bucket{le="3"}'
+        values: "0x40 0+4x160"
+      - series: 'llm_slo_output_tokens_per_second_count'
+        values: "0+4x200"
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: LLMThroughputBurnRatePageDemo
+        exp_alerts: []
+      - eval_time: 20m
+        alertname: LLMThroughputBurnRatePageDemo
+        exp_alerts:
+          - exp_labels:
+              severity: page
+              sli: throughput
+              slo_mode: demo
+              slo_profile: cpu
+            exp_annotations:
+              summary: "[DEMO] throughput SLO (90%) is burning error budget at 10.0x"
+              description: >-
+                Windows 3m/1m at 8x or 6m/2m at 5x (demo windows). Output tokens per second above
+                the profile threshold, measured per request after the first token.
+              runbook: docs/framework.md
+
+  # ---------------------------------------------------------------- quality
+  # eval checks: all pass until t=10m, then all fail.
+  - interval: 15s
+    input_series:
+      - series: 'llm_slo_eval_checks_total{llm_slo_eval_result="pass"}'
+        values: "0+4x40 160x160"
+      - series: 'llm_slo_eval_checks_total{llm_slo_eval_result="fail"}'
+        values: "0x40 0+4x160"
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: LLMQualityBurnRatePageDemo
+        exp_alerts: []
+      - eval_time: 20m
+        alertname: LLMQualityBurnRatePageDemo
+        exp_alerts:
+          - exp_labels:
+              severity: page
+              sli: quality
+              slo_mode: demo
+              slo_profile: cpu
+            exp_annotations:
+              summary: "[DEMO] quality SLO (90%) is burning error budget at 10.0x"
+              description: >-
+                Windows 3m/1m at 8x or 6m/2m at 5x (demo windows). Deterministic evaluation checks
+                (eval/golden.jsonl) passing: keywords present, valid JSON matching a schema, refusal
+                when required, length cap. A proxy for quality, not a measure of it (see README
+                limitations).
+              runbook: docs/framework.md
+
+  # ---------------------------------------------------------------- cost budget
+  # amortized cost: 0.0009/request (0.9 per 1k) until t=10m, then 0.004/request (4 per 1k).
+  - interval: 15s
+    input_series:
+      - series: 'llm_slo_request_cost_sum{llm_slo_cost_model="amortized"}'
+        values: "0+0.0036x40 0.144+0.016x160"
+      - series: 'llm_slo_request_cost_count{llm_slo_cost_model="amortized"}'
+        values: "0+4x200"
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: LLMCostBudgetExceededDemo
+        exp_alerts: []
+      - eval_time: 20m
+        alertname: LLMCostBudgetExceededDemo
+        exp_alerts:
+          - exp_labels:
+              severity: ticket
+              sli: cost
+              slo_mode: demo
+              slo_profile: cpu
+              llm_slo_cost_model: amortized
+            exp_annotations:
+              summary: >-
+                [DEMO] cost per 1k requests is 4.00 USD, budget 1.5
+                (amortized model; assumptions, not real prices)
+              runbook: docs/framework.md

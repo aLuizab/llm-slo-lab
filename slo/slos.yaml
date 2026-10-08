@@ -1,0 +1,118 @@
+---
+# SLO specification for the llm-gateway. Human-readable, OpenSLO-inspired (not OpenSLO
+# conformant). This file is the single source of truth: slo/gen_rules.py turns it into
+#   slo/rules.yaml            PrometheusRule, production windows (30-day SLO)
+#   slo/rules-demo.yaml       PrometheusRule, compressed windows for a 5-minute live demo
+#   slo/prometheus/*.yaml     the same groups as plain Prometheus rule files, for promtool
+# Regenerate with `make slo-gen`; CI fails if the generated files are stale.
+
+service: llm-gateway
+slo_window: 30d
+profile_default: cpu
+
+# Thresholds depend on the hardware the model runs on. Values must be histogram bucket
+# boundaries of the gateway (gateway/app/config.py), because the SLI uses `le="<threshold>"`.
+profiles:
+  cpu:
+    ttft_threshold_s: "2"          # TTFT good if < 2 s (Qwen2.5-0.5B, fp32, 3 CPUs: ~0.6-0.9 s healthy)
+    tokens_per_s_threshold: "3"    # throughput good if > 3 output tokens/s (healthy: ~4.5-6)
+  gpu:
+    ttft_threshold_s: "0.5"
+    tokens_per_s_threshold: "20"
+
+# Multi-window, multi-burn-rate alerting (Google SRE Workbook, chapter 5). `factor` is the
+# burn rate: error ratio divided by the error budget (1 - objective). Both windows of a pair
+# must exceed the factor. Overridable per SLO (see quality/throughput).
+burn_rates:
+  page:
+    - {long: 1h, short: 5m, factor: 14.4}   # 2% of a 30-day budget in 1 hour
+    - {long: 6h, short: 30m, factor: 6}     # 5% in 6 hours
+  ticket:
+    - {long: 1d, short: 2h, factor: 3}      # 10% in 1 day
+    - {long: 3d, short: 6h, factor: 1}      # 10% in 3 days
+
+modes:
+  prod:
+    metric_prefix: slo
+    recording_windows: [5m, 30m, 1h, 2h, 6h, 1d, 3d]
+    budget_window: 30d                    # error budget remaining is computed over this
+    window_map: {}                        # production windows are used as-is
+    page_for: 2m
+    ticket_for: 15m
+    cost_window: 1h
+    cost_for: 10m
+  demo:
+    # DEMO ONLY: the same logic with compressed windows so a toggle (make break-*) pages within
+    # a 5-minute slot. Never use these in production: a 1-minute window pages on noise.
+    metric_prefix: slodemo
+    recording_windows: [1m, 2m, 3m, 6m, 10m, 20m]
+    budget_window: 1h
+    window_map: {5m: 1m, 30m: 2m, 1h: 3m, 2h: 3m, 6h: 6m, 1d: 10m, 3d: 20m}
+    page_for: 0m
+    ticket_for: 0m
+    cost_window: 5m
+    cost_for: 1m
+
+# Each SLI is good/total over a window. `{window}` and profile keys are substituted.
+slos:
+  - name: availability
+    objective: 0.99
+    description: >-
+      A request is good when the gateway returns a non-error, non-empty, non-truncated
+      response. Upstream errors, timeouts, empty bodies, truncation at max_tokens and injected
+      faults are bad events.
+    sli:
+      good: sum(rate(llm_slo_requests_total{llm_slo_outcome="success"}[{window}]))
+      total: sum(rate(llm_slo_requests_total[{window}]))
+
+  - name: responsiveness
+    objective: 0.95
+    description: >-
+      Time to first token below the profile threshold. Only requests that produced a first
+      token are counted here; failures are already bad events for availability.
+    sli:
+      good: sum(rate(gen_ai_server_time_to_first_token_seconds_bucket{le="{ttft_threshold_s}"}[{window}]))
+      total: sum(rate(gen_ai_server_time_to_first_token_seconds_count[{window}]))
+
+  - name: throughput
+    objective: 0.90
+    description: >-
+      Output tokens per second above the profile threshold, measured per request after the
+      first token.
+    sli:
+      good: >-
+        sum(rate(llm_slo_output_tokens_per_second_count[{window}]))
+        - sum(rate(llm_slo_output_tokens_per_second_bucket{le="{tokens_per_s_threshold}"}[{window}]))
+      total: sum(rate(llm_slo_output_tokens_per_second_count[{window}]))
+    # With a 90% objective the error budget is 10%, so a burn rate above 10x is impossible
+    # (it would need more than 100% bad events). 14.4x/6x become 8x/5x.
+    burn_rates:
+      page:
+        - {long: 1h, short: 5m, factor: 8}
+        - {long: 6h, short: 30m, factor: 5}
+      ticket:
+        - {long: 1d, short: 2h, factor: 3}
+        - {long: 3d, short: 6h, factor: 1}
+
+  - name: quality
+    objective: 0.90
+    description: >-
+      Deterministic evaluation checks (eval/golden.jsonl) passing: keywords present, valid
+      JSON matching a schema, refusal when required, length cap. A proxy for quality, not a
+      measure of it (see README limitations).
+    sli:
+      good: sum(rate(llm_slo_eval_checks_total{llm_slo_eval_result="pass"}[{window}]))
+      total: sum(rate(llm_slo_eval_checks_total[{window}]))
+    burn_rates:  # same reasoning as throughput
+      page:
+        - {long: 1h, short: 5m, factor: 8}
+        - {long: 6h, short: 30m, factor: 5}
+      ticket:
+        - {long: 1d, short: 2h, factor: 3}
+        - {long: 3d, short: 6h, factor: 1}
+
+# Cost is a budget signal, not an SLO: nobody is paged, a ticket is opened. ASSUMPTIONS, NOT
+# REAL PRICES (gateway/k8s/configmaps.yaml).
+cost:
+  cost_model: amortized                  # which llm_slo_cost_model to budget on
+  budget_per_1k_requests: 1.5            # notional USD; healthy baseline is ~0.9
