@@ -1101,14 +1101,25 @@
       "options": {}
     },
     {
-      "id": 47,
-      "type": "alertlist",
-      "title": "Firing alerts",
+      "id": 48,
+      "type": "timeseries",
+      "title": "Firing alerts (LLM*, from Prometheus ALERTS)",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "targets": [],
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "max by (alertname) (ALERTS{alertstate=\"firing\", alertname=~\"LLM.*\"})",
+          "legendFormat": "{{alertname}}",
+          "refId": "V",
+          "format": "time_series"
+        }
+      ],
       "gridPos": {
         "w": 6,
         "h": 8,
@@ -1116,25 +1127,30 @@
         "y": 32
       },
       "fieldConfig": {
-        "defaults": {},
+        "defaults": {
+          "unit": "none",
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "stepAfter",
+            "lineWidth": 1,
+            "fillOpacity": 40,
+            "stacking": {
+              "mode": "normal"
+            }
+          },
+          "min": 0
+        },
         "overrides": []
       },
       "options": {
-        "alertName": "LLM",
-        "dashboardAlerts": false,
-        "groupBy": [],
-        "groupMode": "default",
-        "maxItems": 20,
-        "sortOrder": 1,
-        "stateFilter": {
-          "firing": true,
-          "pending": true,
-          "noData": false,
-          "normal": false,
-          "error": false
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": []
         },
-        "viewMode": "list",
-        "datasource": "Alertmanager"
+        "tooltip": {
+          "mode": "multi"
+        }
       }
     }
   ]

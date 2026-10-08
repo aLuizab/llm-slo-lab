@@ -67,9 +67,10 @@ grafana:
   enabled: true
   adminPassword: llm-slo-lab  # lab only
   defaultDashboardsEnabled: false
+  # 384Mi was OOM-killed 12 times rendering the 22-panel dashboard over 3-hour ranges (ADR-021).
   resources:
-    requests: {cpu: 50m, memory: 128Mi}
-    limits: {memory: 384Mi}
+    requests: {cpu: 50m, memory: 256Mi}
+    limits: {memory: 1Gi}
   grafana.ini:
     analytics: {check_for_updates: false, reporting_enabled: false}
     auth.anonymous: {enabled: true, org_role: Viewer}

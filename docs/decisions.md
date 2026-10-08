@@ -464,3 +464,24 @@ Two more realistic mechanisms were tried and kept with a warning:
 Also learned the hard way: `kubectl patch` on an InferenceService that leaves
 `requests.cpu > limits.cpu` is accepted by the API and silently rejected at the Deployment, so
 the toggle now waits on `rollout status` instead of on the InferenceService condition.
+
+## ADR-021: Grafana needs 1 Gi, and headless screenshots are an engineering problem of their own
+
+**Status:** Accepted (2026-10-08)
+
+While capturing the dashboard for the evidence folder, Grafana (limit 384 Mi) was OOM-killed
+**12 times**: the 22-panel dashboard over a 3-hour range, with a heatmap and several
+`histogram_quantile` panels, plus a few hung headless-browser tabs re-querying it, was enough.
+Every "failed to load its application files" page and blank capture was a crash-looping
+Grafana, and the crash loop drove the node's load average to 29. The limit is now 1 Gi
+(request 256 Mi) and the measured requirement in the README changed accordingly.
+
+What `scripts/screenshot.sh` ended up needing, each learned from a failure: its own
+port-forward on a high port (port 3000 stopped being reachable from Windows mid-session), the
+eth0 WSL IP (not the first address of `hostname -I`, which can be a Docker bridge), a profile
+directory and output file on the Windows side (Chrome's `LockFileEx` fails on WSL paths and
+the browser hangs), crashpad disabled, a throwaway profile (a desktop browser steals the
+request), an absolute time range with `refresh=` (relative ranges keep re-querying),
+`--virtual-time-budget` of 45 s (`--timeout` captures a blank page; 15 s leaves panel plugins
+unloaded), and a minimum-size check with retries. It is worth having only because the evidence
+PNGs are part of the talk's fallback plan.

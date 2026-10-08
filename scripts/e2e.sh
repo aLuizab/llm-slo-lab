@@ -35,8 +35,14 @@ for m in 'sum(llm_slo_requests_total)' 'sum(gen_ai_server_time_to_first_token_se
   [ "$v" = "none" ] && fail=1
 done
 [ $fail -eq 1 ] && { echo "missing metrics" >&2; exit 1; }
-say "assert: recording rules evaluate"
-v=$(q 'slodemo:sli_error:ratio_rate1m{sli="availability"}'); echo "  availability error ratio (1m): $v"; [ "$v" != "none" ]
+say "assert: recording rules evaluate (the operator needs a minute to load a new PrometheusRule)"
+v=none
+for i in $(seq 1 18); do
+  v=$(q 'slodemo:sli_error:ratio_rate1m{sli="availability"}')
+  [ "$v" != "none" ] && break
+  echo "  t+$((i*10))s: not evaluated yet"; sleep 10
+done
+echo "  availability error ratio (1m): $v"; [ "$v" != "none" ]
 
 say "break-errors, keep load flowing, wait for LLMAvailabilityBurnRatePageDemo"
 scripts/chaos.sh break-errors

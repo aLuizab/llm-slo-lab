@@ -41,7 +41,8 @@ Then, in another terminal: `make break-errors`, watch Grafana, `make heal`. Requ
 measured on the development laptop: 8 CPUs and 12 GB for the VM running Docker and kind
 (WSL2 here), ~20 GB of disk (the KServe runtime image is 14 GB uncompressed plus a copy in
 the kind node), no GPU. Idle memory with everything installed is ~6 GB; peak during the
-autoscaling ramp 8.4 GB.
+autoscaling ramp 8.4 GB. Grafana needs its 1 Gi limit for the 22-panel dashboard over long
+ranges (ADR-021).
 
 Step by step, the same thing:
 

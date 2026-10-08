@@ -429,29 +429,36 @@ def build() -> dict:
             },
         )
     )
+    # Prometheus' own ALERTS series rather than Grafana's alert-list widget: the widget only
+    # lists Grafana-managed alerts, and these rules live in Prometheus.
     panels.append(
         panel(
-            "alertlist",
-            "Firing alerts",
-            [],
+            "timeseries",
+            "Firing alerts (LLM*, from Prometheus ALERTS)",
+            [
+                target(
+                    'max by (alertname) (ALERTS{alertstate="firing", alertname=~"LLM.*"})',
+                    "{{alertname}}",
+                )
+            ],
             w=6,
             h=8,
+            unit="none",
+            fieldConfig={
+                "defaults": {
+                    "custom": {
+                        "drawStyle": "line",
+                        "lineInterpolation": "stepAfter",
+                        "lineWidth": 1,
+                        "fillOpacity": 40,
+                        "stacking": {"mode": "normal"},
+                    },
+                    "min": 0,
+                }
+            },
             options={
-                "alertName": "LLM",
-                "dashboardAlerts": False,
-                "groupBy": [],
-                "groupMode": "default",
-                "maxItems": 20,
-                "sortOrder": 1,
-                "stateFilter": {
-                    "firing": True,
-                    "pending": True,
-                    "noData": False,
-                    "normal": False,
-                    "error": False,
-                },
-                "viewMode": "list",
-                "datasource": "Alertmanager",
+                "legend": {"displayMode": "list", "placement": "bottom", "calcs": []},
+                "tooltip": {"mode": "multi"},
             },
         )
     )

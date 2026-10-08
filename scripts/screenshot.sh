@@ -60,14 +60,27 @@ esac
 # --virtual-time-budget lets Grafana's async queries and renders finish (about 60 s wall time
 # for the full dashboard); a plain --timeout captures a blank page. Works only with the
 # absolute range + refresh off above, otherwise the budget never settles.
-timeout 150 "$browser" --headless=new --disable-gpu --hide-scrollbars --no-first-run --no-default-browser-check \
-  --disable-crashpad --disable-breakpad --user-data-dir="$profile_arg" \
-  --virtual-time-budget="${SHOT_VTB_MS:-45000}" \
-  --window-size="$size" --screenshot="$target" "$url" >/dev/null 2>&1
+# Retries: a partially loaded page (plugin bundles time out through the port-forward) renders
+# as a small PNG, so anything under SHOT_MIN_BYTES is retried.
+min_bytes="${SHOT_MIN_BYTES:-60000}"; [ -n "$panel" ] && min_bytes="${SHOT_MIN_BYTES:-15000}"
+ok=""
+for attempt in 1 2 3; do
+  rm -f "${wintarget:-$out}"
+  timeout 150 "$browser" --headless=new --disable-gpu --hide-scrollbars --no-first-run --no-default-browser-check \
+    --disable-crashpad --disable-breakpad --user-data-dir="$profile_arg" \
+    --virtual-time-budget="${SHOT_VTB_MS:-45000}" \
+    --window-size="$size" --screenshot="$target" "$url" >/dev/null 2>&1
+  src="${wintarget:-$out}"
+  if [ -s "$src" ] && [ "$(stat -c %s "$src")" -ge "$min_bytes" ]; then
+    [ -n "$wintarget" ] && cp "$wintarget" "$out"; ok=yes; break
+  fi
+  echo "attempt $attempt: $([ -s "$src" ] && stat -c %s "$src" || echo 0) bytes, retrying" >&2
+  sleep 10
+done
 if [ -n "$wintarget" ]; then
-  [ -s "$wintarget" ] && cp "$wintarget" "$out"; rm -f "$wintarget"
+  rm -f "$wintarget"
   (sleep 2; cmd.exe /c "rmdir /s /q $(wslpath -w "$profile")" >/dev/null 2>&1) &
 else
   rm -rf "$profile"
 fi
-[ -s "$out" ] && echo "wrote $out ($(stat -c %s "$out") bytes) from $url" || { echo "screenshot failed" >&2; exit 1; }
+[ -n "$ok" ] && echo "wrote $out ($(stat -c %s "$out") bytes) from $url" || { echo "screenshot failed" >&2; exit 1; }
