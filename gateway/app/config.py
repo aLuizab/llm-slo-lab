@@ -55,6 +55,12 @@ class Settings:
     capture_content: bool = False
     fault_error_rate: float = 0.0
     fault_extra_latency_ms: float = 0.0
+    # "broken": the last user message is replaced by an unrelated one, simulating a prompt
+    # template / RAG regression. Requests still succeed and are fast; only quality breaks.
+    fault_prompt_template: str = ""
+    # Throttles the stream: the gateway waits this long before counting and forwarding each
+    # chunk, so the user-visible tokens/s drops (break-throughput) without touching the model.
+    fault_inter_token_delay_ms: float = 0.0
     system_prompt: str | None = None
     cost_model: CostModel = field(default_factory=CostModel)
     connect_timeout_s: float = 5.0
@@ -86,6 +92,8 @@ class Settings:
             capture_content=_env_bool("CAPTURE_CONTENT", False),
             fault_error_rate=_env_float("FAULT_ERROR_RATE", 0.0),
             fault_extra_latency_ms=_env_float("FAULT_EXTRA_LATENCY_MS", 0.0),
+            fault_prompt_template=env("FAULT_PROMPT_TEMPLATE", "").strip().lower(),
+            fault_inter_token_delay_ms=_env_float("FAULT_INTER_TOKEN_DELAY_MS", 0.0),
             system_prompt=system_prompt,
             cost_model=cost_model,
             connect_timeout_s=_env_float("UPSTREAM_CONNECT_TIMEOUT_S", 5.0),

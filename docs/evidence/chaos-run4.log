@@ -1,0 +1,19 @@
+02:36:56  chaos verification start; demo rules; loadgen concurrency 1 in background
+02:36:56  baseline alerts: LLMResponsivenessBurnRateTicketDemo=firing LLMCostBudgetExceededDemo=firing
+02:36:56  --- break-quality (expect LLMQualityBurnRatePageDemo)
+    02:36:56  BREAK quality: broken prompt template (user question dropped) + degraded system prompt + two evaluator runs
+    deployment "llm-gateway" successfully rolled out
+    evaluator run started (job/eval-now)
+      {"items": 12, "items_passed": 0, "checks": 13, "checks_passed": 0, "pass_ratio": 0.0, "seconds": 83.2}
+    evaluator run started (job/eval-now)
+02:39:03  break-quality: LLMQualityBurnRatePageDemo firing after 16s
+02:39:03      all demo alerts now: LLMResponsivenessBurnRatePageDemo LLMResponsivenessBurnRateTicketDemo LLMQualityBurnRatePageDemo LLMQualityBurnRateTicketDemo LLMCostBudgetExceededDemo
+02:39:03  --- heal
+    02:39:03  HEAL: faults off, original prompt, original predictor resources
+    deployment "llm-gateway" successfully rolled out
+    deployment "qwen-predictor" successfully rolled out
+    evaluator run started (job/eval-now)
+      {"items": 12, "items_passed": 10, "checks": 18, "checks_passed": 16, "pass_ratio": 0.8889, "seconds": 94.4}
+    evaluator run started (job/eval-now)
+02:41:09  heal: LLMQualityBurnRatePageDemo resolved after 0s
+02:41:39  chaos verification done

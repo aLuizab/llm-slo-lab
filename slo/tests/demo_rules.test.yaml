@@ -141,7 +141,7 @@ tests:
             exp_annotations:
               summary: "[DEMO] quality SLO (90%) is burning error budget at 10.0x"
               description: >-
-                Windows 6m/2m at 5x (demo windows). Deterministic evaluation checks
+                Windows 3m/1m at 5x (demo windows). Deterministic evaluation checks
                 (eval/golden.jsonl) passing: keywords present, valid JSON matching a schema, refusal
                 when required, length cap. A proxy for quality, not a measure of it (see README
                 limitations).

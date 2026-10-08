@@ -253,6 +253,31 @@ async def test_system_prompt_injected_once(make_gateway, mock_llm):
         assert seen["messages"][0]["content"] == "X"
 
 
+async def test_broken_prompt_template_fault(make_gateway, mock_llm):
+    app, reader, _ = make_gateway(fault_prompt_template="broken")
+    async with (
+        app.router.lifespan_context(app),
+        _client(app) as c,
+        httpx.AsyncClient(base_url=mock_llm) as dbg,
+    ):
+        status, _ = await _stream(c)
+        seen = (await dbg.get("/_debug/last_request")).json()
+    assert status == 200
+    assert "Lisbon" in seen["messages"][-1]["content"]  # user question replaced
+    m = metrics_by_name(reader)
+    _point(m[semconv.METRIC_REQUESTS], **{semconv.ATTR_OUTCOME: "success"})  # still a good event
+
+
+async def test_inter_token_delay_fault_lowers_measured_rate(make_gateway):
+    app, reader, _ = make_gateway(fault_inter_token_delay_ms=100)
+    async with app.router.lifespan_context(app), _client(app) as c:
+        status, _ = await _stream(c)
+    assert status == 200
+    m = metrics_by_name(reader)
+    rate = m[semconv.METRIC_OUTPUT_TOKEN_RATE][0]
+    assert rate.count == 1 and rate.sum < 12  # 12 tokens at >=100 ms each: well under 12 tok/s
+
+
 async def test_content_capture_opt_in(make_gateway):
     app, _, spans = make_gateway(capture_content=True, system_prompt="Be terse.")
     async with app.router.lifespan_context(app), _client(app) as c:

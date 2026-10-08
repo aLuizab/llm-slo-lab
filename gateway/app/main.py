@@ -198,6 +198,8 @@ async def _handle_chat(request: Request):
             {"role": "system", "content": settings.system_prompt},
             *body["messages"],
         ]
+    if settings.fault_prompt_template == "broken":
+        _break_prompt_template(body["messages"])
 
     attrs = _base_attributes(settings, body, _client_name(request))
     m = Measurement(concurrency_at_start=app.state.in_flight + 1)
@@ -279,6 +281,19 @@ async def _handle_chat(request: Request):
         media_type="text/event-stream",
         headers={"cache-control": "no-cache", "x-accel-buffering": "no"},
     )
+
+
+BROKEN_TEMPLATE_PROMPT = (
+    "Describe a rainy afternoon in Lisbon in three sentences, mentioning the trams and the river."
+)
+
+
+def _break_prompt_template(messages: list[dict]) -> None:
+    """Chaos: replace the last user message, like a template that drops the user's question."""
+    for m in reversed(messages):
+        if m.get("role") == "user":
+            m["content"] = BROKEN_TEMPLATE_PROMPT
+            return
 
 
 def _err(message: str, code: str) -> dict:

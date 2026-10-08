@@ -1,0 +1,44 @@
+01:08:18  chaos verification start; demo rules; loadgen concurrency 1 in background
+01:08:19  baseline alerts: LLMResponsivenessBurnRateTicketDemo=firing
+01:08:20  --- break-errors (expect LLMAvailabilityBurnRatePageDemo)
+    01:08:20  BREAK availability: FAULT_ERROR_RATE=0.5
+    deployment "llm-gateway" successfully rolled out
+01:09:49  break-errors: LLMAvailabilityBurnRatePageDemo firing after 61s
+01:09:49      all demo alerts now: LLMAvailabilityBurnRatePageDemo LLMAvailabilityBurnRateTicketDemo LLMResponsivenessBurnRateTicketDemo LLMQualityBurnRateTicketDemo
+01:09:49  --- heal
+    01:09:49  HEAL: faults off, original prompt, original predictor resources
+    deployment "llm-gateway" successfully rolled out
+    evaluator run started (job/eval-now)
+01:12:22  heal: LLMAvailabilityBurnRatePageDemo resolved after 136s
+01:12:52  --- break-latency (expect LLMResponsivenessBurnRatePageDemo)
+    01:12:52  BREAK responsiveness: FAULT_EXTRA_LATENCY_MS=3000 (TTFT > 2 s)
+    deployment "llm-gateway" successfully rolled out
+01:14:20  break-latency: LLMResponsivenessBurnRatePageDemo firing after 75s
+01:14:20      all demo alerts now: LLMAvailabilityBurnRateTicketDemo LLMResponsivenessBurnRatePageDemo LLMResponsivenessBurnRateTicketDemo
+01:14:20  --- heal
+    01:14:21  HEAL: faults off, original prompt, original predictor resources
+    deployment "llm-gateway" successfully rolled out
+    evaluator run started (job/eval-now)
+01:17:07  heal: LLMResponsivenessBurnRatePageDemo resolved after 150s
+01:17:37  --- break-throughput (expect LLMThroughputBurnRatePageDemo)
+    01:17:37  BREAK throughput: predictor CPU limit 3 -> 1 core (model reloads, ~1.5 min)
+    01:17:39  predictor ready with 1 core
+01:24:41  break-throughput: LLMThroughputBurnRatePageDemo firing after TIMEOUT(state=none)s
+01:24:41      all demo alerts now: LLMCostBudgetExceededDemo
+01:24:41  --- heal
+    01:24:41  HEAL: faults off, original prompt, original predictor resources
+    deployment "llm-gateway" successfully rolled out
+    evaluator run started (job/eval-now)
+01:25:01  heal: LLMThroughputBurnRatePageDemo resolved after 0s
+01:25:31  --- break-quality (expect LLMQualityBurnRatePageDemo)
+    01:25:31  BREAK quality: poetry-only system prompt + evaluator run
+    deployment "llm-gateway" successfully rolled out
+    evaluator run started (job/eval-now)
+01:32:46  break-quality: LLMQualityBurnRatePageDemo firing after TIMEOUT(state=none)s
+01:32:46      all demo alerts now: LLMResponsivenessBurnRateTicketDemo LLMQualityBurnRateTicketDemo
+01:32:46  --- heal
+    01:32:46  HEAL: faults off, original prompt, original predictor resources
+    deployment "llm-gateway" successfully rolled out
+    evaluator run started (job/eval-now)
+01:33:04  heal: LLMQualityBurnRatePageDemo resolved after 0s
+01:33:34  chaos verification done

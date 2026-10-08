@@ -1,0 +1,33 @@
+01:37:09  chaos verification start; demo rules; loadgen concurrency 1 in background
+01:37:09  baseline alerts: LLMResponsivenessBurnRateTicketDemo=firing LLMQualityBurnRateTicketDemo=firing
+01:37:09  --- break-throughput (expect LLMThroughputBurnRatePageDemo)
+    01:37:09  BREAK throughput: predictor CPU 3 -> 1 core (requests and limits; model reloads, ~1.5 min)
+    deployment "qwen-predictor" successfully rolled out
+    01:41:30  predictor rolled to 1 core: 3 1 1
+01:48:40  break-throughput: LLMThroughputBurnRatePageDemo firing after TIMEOUT(state=none)s
+01:48:40      all demo alerts now: LLMAvailabilityBurnRatePageDemo LLMAvailabilityBurnRateTicketDemo LLMResponsivenessBurnRateTicketDemo LLMQualityBurnRateTicketDemo
+01:48:40  --- heal
+    01:48:40  HEAL: faults off, original prompt, original predictor resources
+    deployment "llm-gateway" successfully rolled out
+    deployment "qwen-predictor" successfully rolled out
+    evaluator run started (job/eval-now)
+      {"items": 12, "items_passed": 10, "checks": 12, "checks_passed": 10, "pass_ratio": 0.8333, "seconds": 33.9}
+    evaluator run started (job/eval-now)
+01:55:35  heal: LLMThroughputBurnRatePageDemo resolved after 1s
+01:56:05  --- break-quality (expect LLMQualityBurnRatePageDemo)
+    01:56:05  BREAK quality: BANANA-only system prompt + two evaluator runs
+    deployment "llm-gateway" successfully rolled out
+    evaluator run started (job/eval-now)
+      {"items": 12, "items_passed": 10, "checks": 13, "checks_passed": 11, "pass_ratio": 0.8462, "seconds": 115.7}
+    evaluator run started (job/eval-now)
+02:05:40  break-quality: LLMQualityBurnRatePageDemo firing after TIMEOUT(state=none)s
+02:05:40      all demo alerts now: LLMResponsivenessBurnRateTicketDemo LLMQualityBurnRateTicketDemo LLMCostBudgetExceededDemo
+02:05:40  --- heal
+    02:05:40  HEAL: faults off, original prompt, original predictor resources
+    deployment "llm-gateway" successfully rolled out
+    deployment "qwen-predictor" successfully rolled out
+    evaluator run started (job/eval-now)
+      {"items": 12, "items_passed": 12, "checks": 16, "checks_passed": 16, "pass_ratio": 1.0, "seconds": 63.0}
+    evaluator run started (job/eval-now)
+02:07:19  heal: LLMQualityBurnRatePageDemo resolved after 0s
+02:07:49  chaos verification done

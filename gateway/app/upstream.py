@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import time
 from collections.abc import AsyncIterator
@@ -154,6 +155,7 @@ class Upstream:
         a final SSE `error` event and recorded in the Measurement.
         """
         deadline = m.started + self.settings.total_timeout_s
+        throttle = self.settings.fault_inter_token_delay_ms / 1000.0
         try:
             async for line in lines:
                 if not line:
@@ -163,6 +165,8 @@ class Upstream:
                     if payload == "[DONE]":
                         yield b"data: [DONE]\n\n"
                         break
+                    if throttle > 0:  # chaos: slow the stream before the chunk is counted
+                        await asyncio.sleep(throttle)
                     _parse_chunk(payload, m)
                     yield f"data: {payload}\n\n".encode()
                 else:

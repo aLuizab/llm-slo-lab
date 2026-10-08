@@ -108,11 +108,12 @@ slos:
     sli:
       good: sum(rate(llm_slo_eval_checks_total{llm_slo_eval_result="pass"}[{window}]))
       total: sum(rate(llm_slo_eval_checks_total[{window}]))
-    # Same 10% budget reasoning as throughput. Quality is a batch signal (a CronJob every few
-    # minutes), so the fast 1h/5m pair is meaningless: only the slower pair pages.
+    # Same 10% budget reasoning as throughput. Quality is a batch signal (a run every 2 min),
+    # so a 5-minute window holds 2-3 runs; one pair at 5x is enough, 8x would need >80% of
+    # checks failing while the window still contains the last healthy run.
     burn_rates:
       page:
-        - {long: 6h, short: 30m, factor: 5}
+        - {long: 1h, short: 5m, factor: 5}
       ticket:
         - {long: 1d, short: 2h, factor: 3}
         - {long: 3d, short: 6h, factor: 1}

@@ -377,7 +377,7 @@ spec:
           threshold, measured per request after the first token.
         runbook: docs/framework.md
     - alert: LLMQualityBurnRatePage
-      expr: (slo:burn_rate:rate6h{sli="quality"} > 5 and slo:burn_rate:rate30m{sli="quality"} > 5)
+      expr: (slo:burn_rate:rate1h{sli="quality"} > 5 and slo:burn_rate:rate5m{sli="quality"} > 5)
       for: 2m
       labels:
         severity: page
@@ -386,7 +386,7 @@ spec:
         slo_profile: cpu
       annotations:
         summary: quality SLO (90%) is burning error budget at {{ $value | printf "%.1f" }}x
-        description: 'Windows 6h/30m at 5x (prod windows). Deterministic evaluation checks (eval/golden.jsonl) passing:
+        description: 'Windows 1h/5m at 5x (prod windows). Deterministic evaluation checks (eval/golden.jsonl) passing:
           keywords present, valid JSON matching a schema, refusal when required, length cap. A proxy for quality,
           not a measure of it (see README limitations).'
         runbook: docs/framework.md

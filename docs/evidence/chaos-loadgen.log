@@ -1,0 +1,6 @@
+loadgen -> http://127.0.0.1:30080 model=qwen2.5-0.5b-instruct phases=[(1, 3600)] max_tokens=128
+-- phase: concurrency=1 for 3600s
+t+  60s: n=1 in_flight=1 ttft p50=nans p95=nans tok/s mean=nan total p50=46.0s bad=1 (100%)
+t+ 120s: n=17 in_flight=1 ttft p50=3.01s p95=4.80s tok/s mean=nan total p50=3.0s bad=0 (0%)
+t+ 180s: n=22 in_flight=1 ttft p50=1.25s p95=2.42s tok/s mean=4.3 total p50=1.3s bad=0 (0%)
+t+ 240s: n=7 in_flight=1 ttft p50=2.15s p95=6.34s tok/s mean=4.7 total p50=6.9s bad=0 (0%)
