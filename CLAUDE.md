@@ -37,6 +37,7 @@ KEDA scales the predictor on in-flight requests, and chaos toggles break each SL
 
 ```
 make tools-check     # verify local toolchain versions
+make up | demo | down   # everything from nothing / UIs + background load / delete cluster
 make cluster         # kind cluster (cluster/kind-config.yaml)
 make platform        # cert-manager, KServe, kube-prometheus-stack, otel-collector, jaeger, keda
 make model           # InferenceService (CPU profile)
@@ -48,8 +49,27 @@ make ui              # port-forward Grafana, Prometheus, Jaeger and print URLs
 make test lint       # pytest + ruff + yamllint + kubeconform
 make slo-gen slo-check slo slo-demo slo-status   # generate rules from slo/slos.yaml, promtool, apply, inspect
 make verify-telemetry                            # PromQL for every signal + a Jaeger trace
-make break-latency | break-errors | break-quality | heal
+make eval eval-run eval-local                    # evaluator CronJob / one run now / full set from host
+make keda-ramp keda-status                       # autoscaling evidence
+make dashboard-gen dashboard screenshot          # Grafana dashboard (generated), headless screenshot
+make break-errors | break-latency | break-throughput | break-cpu | break-quality | heal | chaos-status
+scripts/chaos-verify.sh                          # Phase 7 acceptance (~40 min)
+scripts/e2e.sh                                   # CI end-to-end on kind with mock-llm
 ```
+
+Generated files (never edit by hand): slo/rules*.yaml, slo/prometheus/*.yaml (from
+slo/slos.yaml via `make slo-gen`), dashboards/llm-slos.json and the ConfigMap (from
+dashboards/gen_dashboard.py via `make dashboard-gen`).
+
+Headless screenshots run a Windows browser from WSL: scripts/screenshot.sh opens its own
+port-forward bound to 0.0.0.0 on a high port (33001), uses the eth0 WSL IP in the URL, an
+absolute time range with refresh off, a profile dir and PNG on the Windows side (Chrome's
+file locks fail on WSL paths), crashpad disabled, and `--virtual-time-budget` 45 s (15 s left
+panel plugins unloaded; `--timeout` captures a blank page). A full dashboard takes ~60 s.
+Port 3000 stopped being reachable from Windows mid-session (Hyper-V reserved port ranges),
+while 30080 and 3030 worked; do not depend on 3000 from the Windows side. A browser already
+open on the desktop needs the throwaway `--user-data-dir` the script sets. Edits made from
+Windows drop the exec bit on scripts: `chmod +x scripts/*.sh` before running them.
 
 Never edit slo/rules*.yaml or slo/prometheus/*.yaml by hand: change slo/slos.yaml and run
 `make slo-gen`.

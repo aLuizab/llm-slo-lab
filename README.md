@@ -1,5 +1,7 @@
 # llm-slo-lab
 
+[![ci](https://github.com/aLuizab/llm-slo-lab/actions/workflows/ci.yaml/badge.svg)](https://github.com/aLuizab/llm-slo-lab/actions/workflows/ci.yaml)
+
 **SLOs for LLM inference on Kubernetes**: time to first token, tokens per second, cost per
 request and an evaluation-based quality signal, measured with OpenTelemetry GenAI semantic
 conventions, stored in Prometheus, alerted on with multi-window multi-burn-rate rules, and
@@ -23,13 +25,25 @@ Português (Brasil): [docs/pt-br/README.md](docs/pt-br/README.md)
 | 4 | SLIs, SLOs, recording rules, burn-rate alerts, promtool tests | done |
 | 5 | Quality signal: golden dataset and evaluator CronJob | done |
 | 6 | KEDA autoscaling on in-flight requests | done |
-| 7 | Chaos toggles | pending |
-| 8 | Grafana "LLM SLOs" dashboard | pending |
-| 9 | CI, docs, PT-BR, lightning script, recordings | pending |
+| 7 | Chaos toggles | done |
+| 8 | Grafana "LLM SLOs" dashboard | done |
+| 9 | CI, docs, PT-BR, lightning script, recordings | done |
 
 ## Quickstart
 
-_Filled in when the phases above are done. Target: three commands._ Today:
+```bash
+scripts/install-tools.sh   # kind, kubectl, helm, promtool, kubeconform, jq, make, uv — no sudo
+make up                    # cluster, platform, model, gateway, evaluator, rules, dashboard (~25 min)
+make demo                  # UIs on localhost:3000/9090/9093/16686 + 20 min of background load
+```
+
+Then, in another terminal: `make break-errors`, watch Grafana, `make heal`. Requirements
+measured on the development laptop: 8 CPUs and 12 GB for the VM running Docker and kind
+(WSL2 here), ~20 GB of disk (the KServe runtime image is 14 GB uncompressed plus a copy in
+the kind node), no GPU. Idle memory with everything installed is ~6 GB; peak during the
+autoscaling ramp 8.4 GB.
+
+Step by step, the same thing:
 
 ```bash
 scripts/install-tools.sh   # kind, kubectl, helm, promtool, kubeconform, jq, make, uv — no sudo
@@ -43,20 +57,22 @@ make use-mock | use-model  # point the gateway at mock-llm (offline demo / CI) o
 make loadgen CONCURRENCY=1 DURATION=120   # or RAMP=1:60,4:120,1:60
 make verify-telemetry      # PromQL for every SLI signal + one Jaeger trace
 make ui                    # Grafana / Prometheus / Alertmanager / Jaeger port-forwards
-make test lint             # pytest (gateway, mock-llm), ruff, yamllint, kubeconform
+make eval eval-run         # evaluator CronJob (quality signal); run one slice now
+make slo slo-demo dashboard   # rules (30-day + demo windows), Grafana dashboard
+make break-errors | break-latency | break-throughput | break-quality | heal | chaos-status
+make test lint slo-check   # pytest (gateway, mock-llm, evaluator), ruff, yamllint, kubeconform, promtool
 ```
 
 Measured on the development laptop (WSL2, 8 CPUs / 12 GB): the model is Ready ~95 s after
-`kubectl apply`, TTFT is 0.4–0.5 s and output is ~4.5 tokens/s on CPU. Idle memory after
-Phase 1 is ~4.2 GB. The runtime image needs ~14 GB of disk in Docker plus a copy in the kind
-node.
+`kubectl apply`, TTFT is 0.6–0.9 s through the gateway and output is ~4.5–5.5 tokens/s on
+CPU with one request in flight.
 
 ## Architecture
 
 ```mermaid
 flowchart LR
     LG[loadgen<br/>async, streaming] -->|OpenAI API| GW[llm-gateway<br/>FastAPI · SLIs · fault injection]
-    EV[evaluator CronJob<br/>golden.jsonl] -->|temperature 0| GW
+    EV[evaluator CronJob<br/>golden.jsonl] -->|greedy decoding| GW
     GW -->|/openai/v1/chat/completions| KS[KServe InferenceService<br/>Qwen2.5-0.5B · HF runtime · CPU]
     GW -.->|offline / CI| MK[mock-llm]
     GW -->|OTLP| OC[OpenTelemetry Collector]
@@ -65,7 +81,7 @@ flowchart LR
     PR --> AM[Alertmanager<br/>burn-rate alerts]
     PR --> GF[Grafana<br/>LLM SLOs dashboard]
     PR -->|in-flight per replica| KD[KEDA]
-    KD -->|scales predictor 1..3| KS
+    KD -->|scales predictor 1..2| KS
 ```
 
 `make ui` port-forwards Grafana (3000), Prometheus (9090), Alertmanager (9093) and Jaeger
@@ -73,7 +89,26 @@ flowchart LR
 
 ## The framework
 
-_The SLI → why → how → which CNCF project table lives in [docs/framework.md](docs/framework.md)._
+The one slide of the talk; the long form, with what the lab taught, is
+[docs/framework.md](docs/framework.md).
+
+| SLI | Why it matters | How it is measured | CNCF project |
+|---|---|---|---|
+| Availability (99 %) | a 200 with an empty or cut-off answer is a failure to the user | gateway classifies every request: error, timeout, empty, truncated are bad events | OpenTelemetry → Prometheus |
+| Responsiveness (95 % TTFT < 2 s) | time to first token is when the user sees the model is alive; it is the queueing signal | `gen_ai.server.time_to_first_token` histogram, bucket `le="2"` | OpenTelemetry (GenAI semconv) → Prometheus |
+| Throughput (90 % > 3 tok/s) | reading speed; a slow stream feels broken | tokens/s after the first token, tokenizer-counted when the server sends no `usage` | OpenTelemetry → Prometheus, model on KServe |
+| Quality (90 % checks pass) | the output is probabilistic; a repeatable test is the honest signal | CronJob runs a golden set with greedy decoding, emits pass/fail counters | Kubernetes CronJob → OpenTelemetry → Prometheus |
+| Cost (budget) | tokens and node-hours are money | amortized node-time and per-token cost per request, assumptions in a ConfigMap | OpenTelemetry → Prometheus (ticket, no page) |
+| Alerting | burn rate says how fast the budget goes | multi-window multi-burn-rate rules generated from one spec, promtool-tested | Prometheus + Alertmanager |
+| Capacity | a CPU-bound model is at 100 % CPU whenever it works | scale on in-flight requests per replica | KEDA via KServe's native integration |
+
+## The talk
+
+Lightning talk, KubeCon + CloudNativeCon Europe 2027 (Barcelona), AI Inference and
+Infrastructure track: *SLOs for LLMs: What an SRE Measures When the Output Is Probabilistic*.
+Run of show, pre-flight and fallbacks: [talk/lightning-script.md](talk/lightning-script.md);
+terminal recordings for the on-stage fallback: [talk/recordings/](talk/recordings/). The
+schedule link will be added here once the programme is published.
 
 ## What the gateway measures
 
@@ -111,7 +146,7 @@ flip them. Requests may carry `x-mock-*` headers, which the gateway forwards to 
 | Availability | `llm_slo_outcome="success"` (no error, timeout, empty or truncated response) | 99 % | 1h/5m 14.4×, 6h/30m 6× |
 | Responsiveness | TTFT < 2 s on CPU (0.5 s on GPU) | 95 % | 1h/5m 14.4×, 6h/30m 6× |
 | Throughput | > 3 output tokens/s on CPU (20 on GPU) | 90 % | 1h/5m 8×, 6h/30m 5× |
-| Quality | evaluator checks passing | 90 % | 1h/5m 8×, 6h/30m 5× |
+| Quality | evaluator checks passing | 90 % | 1h/5m 5× (batch signal: one pair) |
 | Cost | amortized cost per 1k requests within budget (1.5 notional USD) | budget, not SLO | ticket only |
 
 Tickets open at 1d/2h 3× and 3d/6h 1×. Why 8×/5× for the 90 % objectives: a burn rate can
@@ -128,7 +163,8 @@ exist for 5m, 30m, 1h, 2h, 6h, 1d, 3d plus the 30-day error budget (`slo:` prefi
 [eval/golden.jsonl](eval/golden.jsonl) holds 40 prompts with **deterministic checks**: keywords
 present (`contains`), valid JSON matching a schema (`json`), a refusal where one is required
 (`refuse`), and a word limit (`max_words`). The evaluator CronJob runs a rotating 12-item slice
-every 2 minutes at temperature 0 through the gateway and emits `llm_slo.eval.checks` and
+every 2 minutes with greedy decoding (`temperature: 0.01` — the KServe HF backend treats 0 as
+"unset" and samples, ADR-017) through the gateway and emits `llm_slo.eval.checks` and
 `llm_slo.eval.items` counters (pass/fail) plus a `llm_slo.eval.pass_ratio` gauge over OTLP.
 The Quality SLI is the pass ratio of checks. Evaluator requests carry `x-llm-slo-client:
 evaluator`, so they are excluded from the user-facing SLIs.
@@ -138,9 +174,9 @@ regressions (a broken system prompt, a bad model rollout, a quantization gone wr
 judgement of helpfulness. LLM-as-judge with a stronger model is listed as future work.
 Measured with Qwen2.5-0.5B-Instruct: ~93–95 % of checks pass when healthy; the model
 consistently **fails the two refusal items** (it complies with harmful requests even when
-told not to), which the signal makes visible rather than hides. A few items flip between runs
-even at temperature 0 (fp32 on CPU is not bit-exact across runs), which is why the SLI is a
-ratio over a window and the page threshold needs 50 % failures.
+told not to), which the signal makes visible rather than hides. The SLI is a ratio over a
+window and the page threshold needs 50 % failures, so an item that flips occasionally does not
+page anyone; a broken prompt or rollout does.
 
 ## Autoscaling
 
@@ -157,6 +193,32 @@ desired replicas 1 → 2 within 47 s of in-flight exceeding 1, the new replica R
 ~100 s (fp32 weights from the PVC on a busy node), 60/60 requests successful, memory peak
 8.4 GB, scale back to 1 after the load stopped. `maxReplicas` is 2 on this profile: a third
 2.6 GB replica oversubscribed 8 CPUs / 12 GB and starved the gateway (ADR-018).
+
+## Chaos toggles (the live demo)
+
+Each toggle breaks one SLI and its **demo** burn-rate alert fires within minutes; `make heal`
+puts everything back. Mechanisms and caveats: [chaos/README.md](chaos/README.md); measured
+timings and what failed on the way: [docs/evidence/chaos-summary.md](docs/evidence/chaos-summary.md).
+
+| Toggle | Breaks | Mechanism | Measured: fires / resolves |
+|---|---|---|---|
+| `make break-errors` | Availability | gateway `FAULT_ERROR_RATE=0.5` | 61 s / 136 s |
+| `make break-latency` | Responsiveness | gateway `FAULT_EXTRA_LATENCY_MS=3000` | 75 s / 150 s |
+| `make break-throughput` | Throughput | gateway `FAULT_INTER_TOKEN_DELAY_MS=400` (stream throttled to ~2 tok/s) | 106 s / < 4 min |
+| `make break-quality` | Quality | gateway `FAULT_PROMPT_TEMPLATE=broken` (user question dropped) + degraded system prompt + two evaluator runs | ~2 min / ~2 min |
+| `make break-cpu` | Availability, then Throughput | predictor CPU 3 → 1 core (realistic; on a laptop timeouts come first) | — |
+| `make heal` | — | faults off, prompt and resources restored, two evaluator runs | — |
+
+## Dashboard
+
+`dashboards/llm-slos.json` is generated by `dashboards/gen_dashboard.py` (`make dashboard-gen`)
+and provisioned through a ConfigMap with the `grafana_dashboard=1` label (`make dashboard`).
+Panels: each SLI vs its objective, error budget remaining, burn rates (production and demo
+windows), TTFT heatmap, TTFT p50/p95, tokens/s, requests by outcome, cost per request and per
+1k, eval pass ratio, predictor replicas vs in-flight requests, predictor CPU, firing alerts.
+`make screenshot` captures it headlessly (used for `docs/evidence/`).
+
+![LLM SLOs dashboard](docs/evidence/dashboard.png)
 
 ## Cost assumptions
 

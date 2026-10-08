@@ -18,6 +18,16 @@ help: ## Show targets
 tools-check: ## Verify local toolchain against versions.env
 	@scripts/tools-check.sh
 
+.PHONY: up demo down
+up: cluster platform kind-load-hf model-cache model images mock gateway eval slo slo-demo dashboard ## Everything, from nothing (~25 min + image pulls)
+	@echo; echo "Lab is up. Next: make demo"
+
+demo: ## Open the UIs and start 20 minutes of background load (Ctrl-C stops both)
+	@$(MAKE) --no-print-directory loadgen CONCURRENCY=1 DURATION=1200 & \
+	  scripts/ui.sh; kill %1 2>/dev/null || true
+
+down: cluster-down ## Delete the cluster (model cache and images on the host are kept)
+
 # ---------------------------------------------------------------- cluster
 cluster: ## Create the kind cluster (model cache mounted from $(HOST_MODEL_CACHE))
 	@mkdir -p "$(HOST_MODEL_CACHE)"
@@ -81,14 +91,16 @@ keda-ramp: ## Ramp load and record replicas vs in-flight to docs/evidence/keda-r
 	@scripts/keda-ramp.sh $(RAMP)
 
 # ---------------------------------------------------------------- chaos (see chaos/README.md)
-.PHONY: break-errors break-latency break-throughput break-quality heal chaos-status
+.PHONY: break-errors break-latency break-throughput break-cpu break-quality heal chaos-status
 
 break-errors: ## Availability: 50% of requests get a 503 (FAULT_ERROR_RATE=0.5)
 	@scripts/chaos.sh break-errors
 break-latency: ## Responsiveness: +3 s before every request (FAULT_EXTRA_LATENCY_MS=3000)
 	@scripts/chaos.sh break-latency
-break-throughput: ## Throughput: predictor CPU limit 3 -> 1 core (model reloads)
+break-throughput: ## Throughput: gateway throttles the stream to ~2 tokens/s
 	@scripts/chaos.sh break-throughput
+break-cpu: ## Starve the predictor: CPU 3 -> 1 core (model reloads; breaks availability via timeouts first)
+	@scripts/chaos.sh break-cpu
 break-quality: ## Quality: poetry-only system prompt + immediate evaluator run
 	@scripts/chaos.sh break-quality
 heal: ## Restore everything (faults off, prompt, predictor resources) + evaluator run
@@ -105,9 +117,13 @@ dashboard-gen: ## Generate dashboards/llm-slos.json + ConfigMap from gen_dashboa
 dashboard: ## Apply the Grafana dashboard ConfigMap (sidecar provisions it)
 	kubectl apply -f dashboards/llm-slos-configmap.yaml
 
+.PHONY: record
+record: ## Record the talk fallback casts into talk/recordings/ (asciinema)
+	@scripts/record-demo.sh all
+
 OUT   ?= docs/evidence/dashboard.png
 PANEL ?=
-screenshot: ## Screenshot the dashboard (OUT=file.png PANEL=id FROM=now-30m); needs make ui
+screenshot: ## Screenshot the dashboard (OUT=file.png PANEL=id FROM=now-30m SIZE=1600,900); own port-forward
 	@scripts/screenshot.sh $(OUT) "$(PANEL)" "$(or $(FROM),now-30m)" "$(or $(TO),now)"
 
 # ---------------------------------------------------------------- SLOs

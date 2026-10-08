@@ -401,3 +401,66 @@ signal exists to catch, and it was only visible because the golden set flipped b
   the concurrency-1 tail the evaluator's runs kept the 1-minute average in-flight near 2, so
   two replicas stayed up until traffic really dropped: synthetic traffic counts as load, which
   is correct, and a reason to keep the evaluator's slices short.
+
+## ADR-019: CI runs the whole loop on kind with mock-llm, never the model
+
+**Status:** Accepted (2026-10-08)
+
+GitHub Actions (`.github/workflows/ci.yaml`) has three jobs: lint + unit tests + rule checks
+(ruff, pytest for gateway/mock-llm/evaluator, yamllint, kubeconform, `promtool check` and
+`promtool test`, and a check that the generated rules and dashboard are current), Docker
+builds of the three images, and an end-to-end job on kind. The e2e job installs only
+kube-prometheus-stack, the OpenTelemetry Collector and KEDA, deploys `mock-llm` and the
+gateway pointed at it, runs load, asserts that every SLI metric exists in Prometheus and that
+the demo recording rules evaluate, then runs `break-errors` and asserts that
+`LLMAvailabilityBurnRatePageDemo` fires within six minutes, and heals.
+
+Not in CI, on purpose: cert-manager, KServe and the 14 GB runtime image (a GitHub runner would
+spend most of its 30-minute budget pulling it), the model weights, Jaeger (traces are verified
+by the gateway unit tests and `make verify-telemetry` locally), and the quality SLI (mock-llm
+answers lorem ipsum; the evaluator is unit-tested with a fake gateway instead). The toolchain
+comes from the same `scripts/install-tools.sh` as the laptop, so CI and local use identical
+pinned versions. The gateway tests fetch the tokenizer at the pinned model revision.
+
+### ADR-016/017 amendment: quality pages on 1h/5m at 5×, chaos findings
+
+The first chaos verification run (`docs/evidence/chaos-run1.log`) paged availability after
+61 s and responsiveness after 75 s, with resolution 136 s and 150 s after heal, but neither
+throughput nor quality paged:
+
+- `break-throughput` patched only `limits.cpu`, leaving `requests.cpu=1500m` above it; the
+  resulting Deployment is invalid, KServe's update failed silently and the predictor never
+  rolled. The toggle now patches requests and limits together and waits for the rollout.
+- Under the "poetry only" prompt a 12-item slice still passed 8 of 17 checks (a sea poem
+  contains plenty of keywords), so the quality error ratio hovered around the 50 % needed for
+  5×, and a scheduled run that started before the gateway restart diluted the 6-minute window.
+  The prompt now answers "BANANA" to everything (~90 % of checks fail), `break-quality` and
+  `heal` run the evaluator twice back to back, and quality pages on **1h/5m at 5×** (demo
+  3m/1m): with a run every two minutes a 5-minute window holds two or three runs, so the
+  earlier claim that no 5-minute window is meaningful for a batch signal was too strong.
+
+## ADR-020: Chaos toggles are gateway faults; the realistic variants are kept but labelled
+
+**Status:** Accepted (2026-10-08)
+
+The demo needs each SLI to break on its own within a 5-minute slot and heal just as fast.
+After four verification runs (`docs/evidence/chaos-summary.md`) the toggles that do that are
+all gateway-side faults driven by one ConfigMap: `FAULT_ERROR_RATE` (availability),
+`FAULT_EXTRA_LATENCY_MS` (responsiveness), `FAULT_INTER_TOKEN_DELAY_MS` (throughput: the
+stream is throttled *before* each chunk is counted, so the measured rate is the one the user
+sees) and `FAULT_PROMPT_TEMPLATE=broken` (quality: the user's question is replaced, as a
+template or retrieval bug would). Measured: page in 61 s, 75 s, 106 s and ~2 min; resolve in
+2–4 min after `make heal`.
+
+Two more realistic mechanisms were tried and kept with a warning:
+
+- Starving the predictor (CPU 3 → 1 core, `make break-cpu`): on this laptop it turns requests
+  into 60 s TTFT timeouts, so availability pages first and throughput barely gets samples.
+  Correct behaviour, wrong toggle for a throughput demo.
+- Swapping the system prompt for a degrading one: a 0.5B model ignores it often enough that
+  the pass ratio only drops to 50–85 %. The swap still happens in `break-quality` because it is
+  the mechanism the talk mentions, but the template fault is what makes the alert fire.
+
+Also learned the hard way: `kubectl patch` on an InferenceService that leaves
+`requests.cpu > limits.cpu` is accepted by the API and silently rejected at the Deployment, so
+the toggle now waits on `rollout status` instead of on the InferenceService condition.
