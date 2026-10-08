@@ -47,7 +47,15 @@ for i in $(seq 1 18); do
   [ "$v" != "none" ] && break
   echo "  t+$((i*10))s: not evaluated yet"; sleep 10
 done
-echo "  availability error ratio (1m): $v"; [ "$v" != "none" ]
+echo "  availability error ratio (1m): $v"
+if [ "$v" = "none" ]; then
+  echo "--- diagnostics: rule groups known to Prometheus"
+  curl -fs http://127.0.0.1:19090/api/v1/rules | jq -r '.data.groups[] | .name + " rules=" + (.rules | length | tostring) + " unhealthy=" + ([.rules[] | select(.health != "ok")] | length | tostring) + " " + ([.rules[] | select(.lastError != "") | .lastError] | first // "")' | head -20
+  echo "--- PrometheusRule objects"; kubectl get prometheusrule -A
+  echo "--- raw series"; curl -fs http://127.0.0.1:19090/api/v1/query --data-urlencode 'query=sum by (llm_slo_outcome, llm_slo_client) (llm_slo_requests_total)' | jq -c '.data.result[] | [.metric, .value[1]]'
+  echo "--- operator log"; kubectl -n observability logs deploy/kube-prometheus-stack-operator --tail=30 | grep -iE 'rule|error' | tail -10 | cut -c1-200
+  exit 1
+fi
 
 say "break-errors, keep load flowing, wait for LLMAvailabilityBurnRatePageDemo"
 scripts/chaos.sh break-errors
