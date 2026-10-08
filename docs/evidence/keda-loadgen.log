@@ -1,0 +1,22 @@
+loadgen -> http://127.0.0.1:30080 model=qwen2.5-0.5b-instruct phases=[(1, 60), (3, 150), (1, 240)] max_tokens=128
+-- phase: concurrency=1 for 60s
+t+  30s: n=5 in_flight=1 ttft p50=0.84s p95=4.08s tok/s mean=6.2 total p50=5.0s bad=0 (0%)
+t+  60s: n=3 in_flight=1 ttft p50=1.06s p95=1.27s tok/s mean=5.6 total p50=4.1s bad=0 (0%)
+-- phase: concurrency=3 for 150s
+t+  90s: n=6 in_flight=3 ttft p50=4.56s p95=20.00s tok/s mean=5.5 total p50=13.7s bad=0 (0%)
+t+ 120s: n=3 in_flight=3 ttft p50=13.53s p95=13.75s tok/s mean=4.5 total p50=16.9s bad=0 (0%)
+t+ 150s: n=2 in_flight=3 ttft p50=15.84s p95=31.69s tok/s mean=2.9 total p50=35.1s bad=0 (0%)
+t+ 180s: n=6 in_flight=3 ttft p50=11.13s p95=30.40s tok/s mean=4.7 total p50=14.2s bad=0 (0%)
+t+ 210s: n=4 in_flight=3 ttft p50=8.48s p95=10.80s tok/s mean=4.9 total p50=12.6s bad=0 (0%)
+-- phase: concurrency=1 for 240s
+t+ 255s: n=3 in_flight=1 ttft p50=0.98s p95=7.53s tok/s mean=5.2 total p50=11.7s bad=0 (0%)
+t+ 285s: n=2 in_flight=1 ttft p50=0.79s p95=1.91s tok/s mean=4.4 total p50=13.1s bad=0 (0%)
+t+ 315s: n=3 in_flight=1 ttft p50=3.15s p95=5.78s tok/s mean=3.6 total p50=9.4s bad=0 (0%)
+t+ 345s: n=3 in_flight=1 ttft p50=0.97s p95=1.29s tok/s mean=4.7 total p50=4.6s bad=0 (0%)
+t+ 375s: n=3 in_flight=1 ttft p50=0.89s p95=2.97s tok/s mean=5.3 total p50=5.6s bad=0 (0%)
+t+ 405s: n=3 in_flight=1 ttft p50=3.43s p95=6.94s tok/s mean=4.8 total p50=9.9s bad=0 (0%)
+t+ 435s: n=4 in_flight=1 ttft p50=0.85s p95=1.38s tok/s mean=4.7 total p50=7.1s bad=0 (0%)
+t+ 465s: n=6 in_flight=1 ttft p50=0.69s p95=1.02s tok/s mean=5.2 total p50=3.9s bad=0 (0%)
+== summary
+all: n=60 in_flight=0 ttft p50=1.91s p95=26.61s tok/s mean=4.9 total p50=11.8s bad=0 (0%)
+outcomes: {'success': 60}

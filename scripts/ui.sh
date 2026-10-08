@@ -4,7 +4,8 @@
 set -uo pipefail
 NS=observability
 pids=()
-fwd() { kubectl -n "$NS" port-forward "svc/$1" "$2:$3" >/dev/null 2>&1 & pids+=($!); }
+# bound to 0.0.0.0 so a Windows browser can reach them through the WSL IP (scripts/screenshot.sh)
+fwd() { kubectl -n "$NS" port-forward --address 0.0.0.0 "svc/$1" "$2:$3" >/dev/null 2>&1 & pids+=($!); }
 fwd kube-prometheus-stack-grafana 3000 80
 fwd kube-prometheus-stack-prometheus 9090 9090
 fwd kube-prometheus-stack-alertmanager 9093 9093

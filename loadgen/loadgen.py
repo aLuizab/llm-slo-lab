@@ -117,6 +117,9 @@ async def worker(
                 stats.in_flight -= 1
             s._ts = time.monotonic()  # type: ignore[attr-defined]
             stats.samples.append(s)
+            if s.outcome != "success" and s.total < 1.0:
+                # a fast failure (connection refused/reset) must not turn into a tight loop
+                await asyncio.sleep(1.0)
 
 
 def report(stats: Stats, since: float, label: str) -> None:

@@ -1,0 +1,14 @@
+[project]
+name = "dashboards"
+version = "0.1.0"
+description = "Generates the Grafana LLM SLOs dashboard JSON"
+requires-python = ">=3.12,<3.13"
+dependencies = []
+
+[dependency-groups]
+dev = [
+  "ruff>=0.16",
+]
+
+[tool.uv]
+package = false

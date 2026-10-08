@@ -356,3 +356,48 @@ concurrency 1 per replica.
   what the model can do, keeping two refusal items as a visible, documented gap. The healthy
   pass ratio is 93–95 %; a few items still flip between runs because fp32 inference on CPU is
   not bit-exact. Content never leaves the evaluator unless `CAPTURE_CONTENT=true`.
+
+### ADR-017 amendment: "temperature 0" samples on the KServe HF backend
+
+Observed: the same prompt at `temperature: 0` returned "60", "1000" and "100" on consecutive
+calls. The backend source (`generative_model.py` in `huggingfaceserver:v0.20.0`) only passes
+`temperature` when it is `> 0`, on the assumption that greedy decoding is the default; but
+Qwen2.5's own `generation_config.json` sets `do_sample: true, temperature: 0.7, top_p: 0.8,
+top_k: 20`, so "temperature 0" means "the model's default sampling". Measured: `temperature:
+0.01` is deterministic (4/4 identical); `seed` makes sampling repeatable but not greedy.
+The evaluator sends `temperature: 0.01, top_p: 1`. This is the kind of thing an evaluation
+signal exists to catch, and it was only visible because the golden set flipped between runs.
+
+## ADR-018: Autoscaling with KServe's native KEDA integration, on in-flight requests
+
+**Status:** Accepted (2026-10-08)
+
+- KServe v0.20 Standard mode has a native KEDA path (ADR-008): annotate the InferenceService
+  with `serving.kserve.io/autoscalerClass: keda` and describe the trigger under
+  `spec.predictor.autoScaling.metrics[]` (`type: External`, `backend: prometheus`,
+  `serverAddress`, `query`, `target.type: Value`). KServe then creates and owns a
+  `ScaledObject` (`qwen-predictor`), KEDA creates the HPA (`keda-hpa-qwen-predictor`), and
+  **no KServe HPA exists**, so nothing fights. Verified: the generated ScaledObject carries the
+  Prometheus trigger with `threshold: "1"`; KServe maps `behavior.*.stabilizationWindowSeconds`
+  but drops `policies` (v0.20). The controller logs one transient "dry-run update" conflict on
+  the first reconcile, then succeeds.
+- Signal: `avg_over_time(sum(llm_slo_requests_in_flight)[1m:10s])`, the gateway's in-flight
+  gauge pushed over OTLP, averaged over a minute. Target 1 per replica: the HF backend serves
+  one request at a time (ADR-015), so "one replica per concurrent request" is the honest
+  capacity model. mock-llm gets a hand-written ScaledObject with the same trigger (`autoscaling/`),
+  used in CI; it also documents what KServe generates.
+- **First ramp (1 → 4 → 1 concurrency, max 3 replicas) scaled 1 → 3 within 30 s and then fell
+  over**: a serving replica at its 3-core limit plus two replicas loading fp32 weights
+  oversubscribed the 8 CPUs; the gateway, with a 100m CPU request (a ~2% CFS share under
+  contention), stopped answering probes and was killed once; memory peaked at 10.6 GB of 12.
+  Fixes: `maxReplicas: 2` on the laptop profile (each replica is ~2.6 GB RSS), gateway CPU
+  request 500m with 5 s probe timeouts and 6 failures tolerated, and a 1 s back-off in loadgen
+  after fast failures so a dead endpoint does not turn into a 1,500-requests-per-30-s storm.
+  All three are the kind of thing one only learns by running the ramp.
+- **Second ramp (1 → 3 → 1 concurrency, max 2 replicas)**, `docs/evidence/keda-ramp.log`:
+  desired 1 → 2 at t+47 s (in-flight already above 1 with the evaluator running), second
+  replica Ready at t+149 s, in-flight 3–4 absorbed by two replicas, 60/60 requests successful,
+  no gateway restart, memory peak 8.4 GB; after loadgen stopped KEDA scaled back to 1. During
+  the concurrency-1 tail the evaluator's runs kept the 1-minute average in-flight near 2, so
+  two replicas stayed up until traffic really dropped: synthetic traffic counts as load, which
+  is correct, and a reason to keep the evaluator's slices short.

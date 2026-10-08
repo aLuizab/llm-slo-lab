@@ -32,9 +32,12 @@ kind-load-hf: ## Pull the KServe HF runtime image and load it into kind (4 GB, d
 	kind load docker-image $(KSERVE_HF_IMAGE) --name $(CLUSTER_NAME)
 
 # ---------------------------------------------------------------- platform
-.PHONY: platform-monitoring platform-otel platform-jaeger ui loadgen verify-telemetry
+.PHONY: platform-monitoring platform-otel platform-jaeger platform-keda ui loadgen verify-telemetry
 
-platform: platform-cert-manager platform-kserve platform-monitoring platform-jaeger platform-otel ## Install every platform component
+platform: platform-cert-manager platform-kserve platform-monitoring platform-jaeger platform-otel platform-keda ## Install every platform component
+
+platform-keda: ## KEDA (scales the predictor on in-flight requests)
+	@scripts/platform.sh keda
 
 platform-cert-manager: ## cert-manager (KServe webhook certs)
 	@scripts/platform.sh cert-manager
@@ -63,6 +66,49 @@ loadgen: ## Run load through the gateway (CONCURRENCY, DURATION or RAMP=1:60,4:1
 
 verify-telemetry: ## Print PromQL results for every SLI signal and one Jaeger trace
 	@scripts/verify-telemetry.sh
+
+# ---------------------------------------------------------------- autoscaling
+.PHONY: autoscaling-mock keda-status keda-ramp
+
+autoscaling-mock: ## KEDA ScaledObject for mock-llm (CI / offline demo)
+	kubectl apply -f autoscaling/scaledobject-mock-llm.yaml
+
+keda-status: ## ScaledObjects, HPAs and current replicas
+	kubectl -n $(NAMESPACE) get scaledobject,hpa 2>/dev/null || true
+	kubectl -n $(NAMESPACE) get deploy -o custom-columns=NAME:.metadata.name,DESIRED:.spec.replicas,READY:.status.readyReplicas
+
+keda-ramp: ## Ramp load and record replicas vs in-flight to docs/evidence/keda-ramp.log
+	@scripts/keda-ramp.sh $(RAMP)
+
+# ---------------------------------------------------------------- chaos (see chaos/README.md)
+.PHONY: break-errors break-latency break-throughput break-quality heal chaos-status
+
+break-errors: ## Availability: 50% of requests get a 503 (FAULT_ERROR_RATE=0.5)
+	@scripts/chaos.sh break-errors
+break-latency: ## Responsiveness: +3 s before every request (FAULT_EXTRA_LATENCY_MS=3000)
+	@scripts/chaos.sh break-latency
+break-throughput: ## Throughput: predictor CPU limit 3 -> 1 core (model reloads)
+	@scripts/chaos.sh break-throughput
+break-quality: ## Quality: poetry-only system prompt + immediate evaluator run
+	@scripts/chaos.sh break-quality
+heal: ## Restore everything (faults off, prompt, predictor resources) + evaluator run
+	@scripts/chaos.sh heal
+chaos-status: ## Current fault settings, burn rates and firing alerts
+	@scripts/chaos.sh status
+
+# ---------------------------------------------------------------- dashboard
+.PHONY: dashboard-gen dashboard screenshot
+
+dashboard-gen: ## Generate dashboards/llm-slos.json + ConfigMap from gen_dashboard.py
+	cd dashboards && uv run --frozen python gen_dashboard.py
+
+dashboard: ## Apply the Grafana dashboard ConfigMap (sidecar provisions it)
+	kubectl apply -f dashboards/llm-slos-configmap.yaml
+
+OUT   ?= docs/evidence/dashboard.png
+PANEL ?=
+screenshot: ## Screenshot the dashboard (OUT=file.png PANEL=id FROM=now-30m); needs make ui
+	@scripts/screenshot.sh $(OUT) "$(PANEL)" "$(or $(FROM),now-30m)" "$(or $(TO),now)"
 
 # ---------------------------------------------------------------- SLOs
 .PHONY: slo-gen slo-check slo slo-demo slo-status

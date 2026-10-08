@@ -8,5 +8,9 @@ ignore = ["RUF012"]
 [lint.isort]
 known-first-party = ["app", "mock_llm", "tests", "evaluator", "loadgen"]
 
+[lint.per-file-ignores]
+# long PromQL literals read better unbroken
+"dashboards/gen_dashboard.py" = ["E501"]
+
 [format]
 quote-style = "double"

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Installs one platform component with Helm. Usage: scripts/platform.sh <component>
-# Components: cert-manager kserve kube-prometheus-stack otel-collector jaeger
+# Components: cert-manager kserve kube-prometheus-stack otel-collector jaeger keda
 # Idempotent: uses `helm upgrade --install`. Versions come from versions.env.
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -46,6 +46,13 @@ case "$component" in
     kubectl create namespace observability --dry-run=client -o yaml | kubectl apply -f -
     kubectl apply -f platform/jaeger/jaeger.yaml
     kubectl -n observability rollout status deploy/jaeger --timeout=300s
+    ;;
+  keda)
+    helm repo add kedacore https://kedacore.github.io/charts --force-update >/dev/null
+    helm upgrade --install keda kedacore/keda \
+      --namespace keda --create-namespace --version "$KEDA_VERSION" \
+      -f platform/keda/values.yaml --wait --timeout 5m
+    kubectl -n keda get deploy
     ;;
   *) echo "unknown component: $component" >&2; exit 2 ;;
 esac

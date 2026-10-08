@@ -22,7 +22,7 @@ Português (Brasil): [docs/pt-br/README.md](docs/pt-br/README.md)
 | 3 | kube-prometheus-stack, OpenTelemetry Collector, Jaeger | done |
 | 4 | SLIs, SLOs, recording rules, burn-rate alerts, promtool tests | done |
 | 5 | Quality signal: golden dataset and evaluator CronJob | done |
-| 6 | KEDA autoscaling on in-flight requests | pending |
+| 6 | KEDA autoscaling on in-flight requests | done |
 | 7 | Chaos toggles | pending |
 | 8 | Grafana "LLM SLOs" dashboard | pending |
 | 9 | CI, docs, PT-BR, lightning script, recordings | pending |
@@ -141,6 +141,22 @@ consistently **fails the two refusal items** (it complies with harmful requests 
 told not to), which the signal makes visible rather than hides. A few items flip between runs
 even at temperature 0 (fp32 on CPU is not bit-exact across runs), which is why the SLI is a
 ratio over a window and the page threshold needs 50 % failures.
+
+## Autoscaling
+
+The predictor scales on **queue depth, not CPU**: KServe's native KEDA integration
+(`serving.kserve.io/autoscalerClass: keda` + `spec.predictor.autoScaling`) creates a
+ScaledObject with a Prometheus trigger on the gateway's in-flight gauge,
+`avg_over_time(sum(llm_slo_requests_in_flight)[1m:10s])`, target 1 per replica — because the
+CPU backend serves one request at a time. KServe creates no HPA of its own, so nothing fights.
+`autoscaling/scaledobject-mock-llm.yaml` is the equivalent plain ScaledObject for mock-llm (CI).
+
+Measured on the laptop with `make keda-ramp RAMP=1:60,3:150,1:240`
+([log](docs/evidence/keda-ramp.log), [dashboard](docs/evidence/keda-ramp-dashboard.png)):
+desired replicas 1 → 2 within 47 s of in-flight exceeding 1, the new replica Ready after
+~100 s (fp32 weights from the PVC on a busy node), 60/60 requests successful, memory peak
+8.4 GB, scale back to 1 after the load stopped. `maxReplicas` is 2 on this profile: a third
+2.6 GB replica oversubscribed 8 CPUs / 12 GB and starved the gateway (ADR-018).
 
 ## Cost assumptions
 

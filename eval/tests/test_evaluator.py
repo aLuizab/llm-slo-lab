@@ -121,7 +121,7 @@ def fake_gateway(monkeypatch):
 
     def fake_post(self, url, json=None, headers=None, timeout=None):
         assert headers == {"x-llm-slo-client": "evaluator"}
-        assert json["temperature"] == 0
+        assert json["temperature"] == 0.01  # not 0: the HF backend would sample (ADR-017)
         return FakeResponse(answer_for(json["messages"][0]["content"]))
 
     monkeypatch.setattr(httpx.Client, "post", fake_post)

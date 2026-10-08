@@ -30,13 +30,20 @@ spec:
           volumeMounts:
             - {name: cost-model, mountPath: /etc/llm-gateway/cost-model.yaml, subPath: cost-model.yaml}
             - {name: system-prompt, mountPath: /etc/llm-gateway/system-prompt.txt, subPath: system-prompt.txt}
+          # Probes tolerate CPU contention: when predictor replicas load or generate, the node is
+          # saturated and a 1 s probe timeout would kill the gateway (ADR-018).
           readinessProbe:
             httpGet: {path: /readyz, port: http}
+            timeoutSeconds: 5
+            failureThreshold: 6
           livenessProbe:
             httpGet: {path: /healthz, port: http}
             periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 6
           resources:
-            requests: {cpu: 100m, memory: 192Mi}
+            # 500m request = a fair CPU share under contention (CFS weights follow requests)
+            requests: {cpu: 500m, memory: 192Mi}
             limits: {cpu: "1", memory: 512Mi}
       volumes:
         - name: cost-model

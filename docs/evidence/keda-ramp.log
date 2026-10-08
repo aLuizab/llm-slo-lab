@@ -1,0 +1,37 @@
+ramp=1:60,3:150,1:240 total=450s deploy=qwen-predictor
+time      inflight   ready     desired   mem_mb    phase
+t+0s      1          1         1         5979      
+t+16s     2          1         1         5933      concurrency=1
+t+32s     1          1         1         5918      concurrency=1
+t+47s     1          1         2         6064      concurrency=1
+t+64s     1          1         2         6282      concurrency=3
+t+80s     3          1         2         6362      concurrency=3
+t+96s     3          1         2         6146      concurrency=3
+t+114s    4          1         2         6497      concurrency=3
+t+131s    4          1         2         8153      concurrency=3
+t+149s    4          2         2         8250      concurrency=3
+t+165s    4          2         2         8355      concurrency=3
+t+180s    4          2         2         8358      concurrency=3
+t+196s    4          2         2         8352      concurrency=3
+t+212s    4          2         2         8308      concurrency=3
+t+228s    3          2         2         8336      concurrency=1
+t+244s    2          2         2         8289      concurrency=1
+t+260s    1          2         2         8330      concurrency=1
+t+275s    2          2         2         8329      concurrency=1
+t+291s    2          2         2         8308      concurrency=1
+t+308s    2          2         2         8339      concurrency=1
+t+323s    2          2         2         8328      concurrency=1
+t+339s    2          2         2         8255      concurrency=1
+t+355s    2          2         2         8354      concurrency=1
+t+371s    2          2         2         8324      concurrency=1
+t+387s    2          2         2         8325      concurrency=1
+t+403s    2          2         2         8311      concurrency=1
+t+419s    2          2         2         8288      concurrency=1
+t+434s    1          2         2         8290      concurrency=1
+t+450s    1          2         2         8292      concurrency=1
+t+466s    2          2         2         8340      concurrency=1
+t+482s    1          2         2         8284      concurrency=1
+--- loadgen summary
+== summary
+all: n=60 in_flight=0 ttft p50=1.91s p95=26.61s tok/s mean=4.9 total p50=11.8s bad=0 (0%)
+outcomes: {'success': 60}

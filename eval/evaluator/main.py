@@ -1,4 +1,4 @@
-"""Evaluator: runs golden.jsonl through the gateway at temperature 0 and emits the quality
+"""Evaluator: runs golden.jsonl through the gateway with greedy decoding and emits the quality
 signal over OTLP.
 
 Metrics (service.name = llm-evaluator):
@@ -41,6 +41,7 @@ ATTR_CHECK = "llm_slo.eval.check"
 ATTR_RESULT = "llm_slo.eval.result"
 ATTR_ITEM = "llm_slo.eval.item"
 CLIENT_HEADER = {"x-llm-slo-client": "evaluator"}
+GREEDY_TEMPERATURE = 0.01
 
 
 def load_golden(path: Path) -> list[dict]:
@@ -101,9 +102,13 @@ class Telemetry:
 
 
 def ask(client: httpx.Client, url: str, item: dict, max_tokens: int, timeout: float) -> str:
+    # Not 0: the KServe HF backend treats temperature <= 0 as "not sent" and the model's own
+    # generation_config (do_sample=true, temperature=0.7 for Qwen2.5) takes over, which is
+    # sampling. 0.01 is effectively greedy and was measured deterministic (ADR-017).
     body = {
         "messages": [{"role": "user", "content": item["prompt"]}],
-        "temperature": 0,
+        "temperature": GREEDY_TEMPERATURE,
+        "top_p": 1,
         "max_tokens": int(item.get("max_tokens", max_tokens)),
         "stream": False,
     }
