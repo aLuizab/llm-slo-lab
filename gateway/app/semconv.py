@@ -47,6 +47,9 @@ ATTR_SERVER_PORT = "server.port"
 # success | upstream_error | timeout | empty | truncated | injected_error
 ATTR_OUTCOME = "llm_slo.outcome"
 ATTR_STREAM = "llm_slo.stream"  # bool
+# who sent the request: "user" (default) or the value of the x-llm-slo-client header, e.g.
+# "evaluator" or "loadgen". SLIs exclude synthetic evaluator traffic.
+ATTR_CLIENT = "llm_slo.client"
 ATTR_TOKEN_SOURCE = "llm_slo.token_source"  # upstream | tokenizer | estimate
 ATTR_COST_MODEL = "llm_slo.cost_model"  # amortized | per_token
 

@@ -21,7 +21,7 @@ Português (Brasil): [docs/pt-br/README.md](docs/pt-br/README.md)
 | 2 | mock-llm and llm-gateway (OTel GenAI metrics, traces, cost, fault injection) | done |
 | 3 | kube-prometheus-stack, OpenTelemetry Collector, Jaeger | done |
 | 4 | SLIs, SLOs, recording rules, burn-rate alerts, promtool tests | done |
-| 5 | Quality signal: golden dataset and evaluator CronJob | pending |
+| 5 | Quality signal: golden dataset and evaluator CronJob | done |
 | 6 | KEDA autoscaling on in-flight requests | pending |
 | 7 | Chaos toggles | pending |
 | 8 | Grafana "LLM SLOs" dashboard | pending |
@@ -123,6 +123,25 @@ exist for 5m, 30m, 1h, 2h, 6h, 1d, 3d plus the 30-day error budget (`slo:` prefi
 `make slo-check` runs `promtool check rules` and the unit tests in `slo/tests/`;
 `make slo-status` shows rule health, burn rates and firing alerts.
 
+## Quality signal
+
+[eval/golden.jsonl](eval/golden.jsonl) holds 40 prompts with **deterministic checks**: keywords
+present (`contains`), valid JSON matching a schema (`json`), a refusal where one is required
+(`refuse`), and a word limit (`max_words`). The evaluator CronJob runs a rotating 12-item slice
+every 2 minutes at temperature 0 through the gateway and emits `llm_slo.eval.checks` and
+`llm_slo.eval.items` counters (pass/fail) plus a `llm_slo.eval.pass_ratio` gauge over OTLP.
+The Quality SLI is the pass ratio of checks. Evaluator requests carry `x-llm-slo-client:
+evaluator`, so they are excluded from the user-facing SLIs.
+
+What this is not: a measure of quality. Deterministic checks are a *proxy* that catches
+regressions (a broken system prompt, a bad model rollout, a quantization gone wrong), not a
+judgement of helpfulness. LLM-as-judge with a stronger model is listed as future work.
+Measured with Qwen2.5-0.5B-Instruct: ~93–95 % of checks pass when healthy; the model
+consistently **fails the two refusal items** (it complies with harmful requests even when
+told not to), which the signal makes visible rather than hides. A few items flip between runs
+even at temperature 0 (fp32 on CPU is not bit-exact across runs), which is why the SLI is a
+ratio over a window and the page threshold needs 50 % failures.
+
 ## Cost assumptions
 
 **All cost figures are assumptions, not real prices.** They live in
@@ -151,6 +170,12 @@ by default is itself an SRE control. See ADR-009 in [docs/decisions.md](docs/dec
   gateway counts tokens with the tokenizer (ADR-006). The vLLM/GPU profile does report it.
 - The GPU profile (`model/gpu/`) is documented but was not run (ADR-010).
 - `finish_reason` from the HF backend is not reliable for detecting truncation (ADR-013).
+- The quality signal is a deterministic proxy, calibrated to what a 0.5B model can do; it
+  catches regressions, it does not grade answers. LLM-as-judge is future work.
+- The 0.5B model does not refuse harmful requests reliably; the golden set keeps two refusal
+  items so the quality signal reflects that.
+- With one CPU replica the model serves one request at a time; evaluator runs and user
+  traffic compete, which is what the KEDA phase is for.
 
 ## Decisions and versions
 

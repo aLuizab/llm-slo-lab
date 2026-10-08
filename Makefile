@@ -118,7 +118,24 @@ image-mock: ## Build the mock-llm image and load it into kind
 	docker build -t llm-slo-lab/mock-llm:dev mock-llm
 	kind load docker-image llm-slo-lab/mock-llm:dev --name $(CLUSTER_NAME)
 
-images: image-gateway image-mock ## Build and load both images
+image-eval: ## Build the evaluator image and load it into kind
+	docker build -t llm-slo-lab/evaluator:dev eval
+	kind load docker-image llm-slo-lab/evaluator:dev --name $(CLUSTER_NAME)
+
+images: image-gateway image-mock image-eval ## Build and load all images
+
+.PHONY: image-eval eval eval-run eval-local
+eval: ## Deploy the evaluator CronJob (quality signal)
+	kubectl apply -f eval/k8s/cronjob.yaml
+
+eval-run: ## Start one evaluator run now and show its result
+	@kubectl -n $(NAMESPACE) delete job eval-now --ignore-not-found >/dev/null
+	kubectl -n $(NAMESPACE) create job eval-now --from=cronjob/evaluator
+	kubectl -n $(NAMESPACE) wait --for=condition=complete job/eval-now --timeout=300s
+	kubectl -n $(NAMESPACE) logs job/eval-now
+
+eval-local: ## Run the whole golden set from the host against localhost:30080 (no OTLP)
+	cd eval && uv run --frozen python -m evaluator.main --url http://127.0.0.1:30080 --verbose
 
 gateway: ## Deploy (or redeploy) the llm-gateway
 	kubectl apply -f model/namespace.yaml -f gateway/k8s/
@@ -145,12 +162,14 @@ use-mock: ## Point the gateway at mock-llm (CI / offline demo)
 smoke: ## Stream a chat completion through the gateway (localhost:30080)
 	@scripts/smoke.sh
 
-test: ## Unit tests (gateway, mock-llm)
+PY_PROJECTS := gateway mock-llm eval loadgen slo
+
+test: ## Unit tests (gateway, mock-llm, evaluator)
 	cd mock-llm && uv run --frozen pytest -q
 	cd gateway && uv run --frozen pytest -q
+	cd eval && uv run --frozen pytest -q
 
 lint: ## ruff + yamllint + kubeconform
-	cd gateway && uv run --frozen ruff check . && uv run --frozen ruff format --check .
-	cd mock-llm && uv run --frozen ruff check . && uv run --frozen ruff format --check .
+	@for p in $(PY_PROJECTS); do (cd $$p && uv run --frozen ruff check . && uv run --frozen ruff format --check .) || exit 1; done
 	yamllint -s .
-	kubeconform -strict -summary -ignore-missing-schemas model/ cluster/ gateway/k8s/ mock-llm/k8s/
+	kubeconform -strict -summary -ignore-missing-schemas model/ cluster/ gateway/k8s/ mock-llm/k8s/ eval/k8s/

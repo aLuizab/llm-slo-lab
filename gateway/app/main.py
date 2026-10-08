@@ -12,6 +12,7 @@ import asyncio
 import json
 import logging
 import random
+import re
 from contextlib import asynccontextmanager
 
 import httpx
@@ -54,8 +55,12 @@ def create_app(settings: Settings | None = None, telemetry: Telemetry | None = N
     app.state.telemetry = telemetry
     app.state.tokens = TokenCounter(settings.tokenizer_path)
     app.state.in_flight = 0
+    # One server span per request; the per-chunk ASGI send/receive spans are noise here.
     FastAPIInstrumentor.instrument_app(
-        app, tracer_provider=telemetry.tracer_provider, excluded_urls="healthz,readyz"
+        app,
+        tracer_provider=telemetry.tracer_provider,
+        excluded_urls="healthz,readyz",
+        exclude_spans=["send", "receive"],
     )
 
     @app.get("/healthz")
@@ -80,7 +85,15 @@ def create_app(settings: Settings | None = None, telemetry: Telemetry | None = N
     return app
 
 
-def _base_attributes(settings: Settings, body: dict) -> dict:
+_CLIENT_RE = re.compile(r"^[a-z0-9_-]{1,32}$")
+
+
+def _client_name(request: Request) -> str:
+    value = request.headers.get("x-llm-slo-client", "user").strip().lower()
+    return value if _CLIENT_RE.match(value) else "user"
+
+
+def _base_attributes(settings: Settings, body: dict, client: str) -> dict:
     host, port = settings.upstream_host
     return {
         semconv.ATTR_OPERATION_NAME: semconv.OPERATION_CHAT,
@@ -88,6 +101,7 @@ def _base_attributes(settings: Settings, body: dict) -> dict:
         semconv.ATTR_REQUEST_MODEL: body.get("model") or settings.model_name,
         semconv.ATTR_SERVER_ADDRESS: host,
         semconv.ATTR_SERVER_PORT: port,
+        semconv.ATTR_CLIENT: client,
     }
 
 
@@ -185,7 +199,7 @@ async def _handle_chat(request: Request):
             *body["messages"],
         ]
 
-    attrs = _base_attributes(settings, body)
+    attrs = _base_attributes(settings, body, _client_name(request))
     m = Measurement(concurrency_at_start=app.state.in_flight + 1)
     app.state.in_flight += 1
     inst.in_flight.add(1, {semconv.ATTR_PROVIDER_NAME: settings.provider_name})

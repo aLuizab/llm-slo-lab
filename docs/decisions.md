@@ -330,3 +330,29 @@ concurrency 1 per replica.
   the concurrency-2 load test (TTFT 6–30 s) and the truncated answers at `max_tokens=64`. The
   error budget went negative because the "30-day" window held one hour of data with a bad
   half hour in it. Nothing was tuned to make this happen.
+
+## ADR-017: Quality signal from deterministic checks, run as a rotating CronJob
+
+**Status:** Accepted (2026-10-08)
+
+- `eval/golden.jsonl`: 40 items, each with one or more checks (`contains`, `json` + JSON
+  Schema, `refuse`, `max_words`); an item passes when all its checks pass. The JSON check
+  tolerates code fences and surrounding prose, because small models add both.
+- The evaluator is a **CronJob every 2 minutes on a rotating 12-item slice** (a full pass
+  every 4 runs, ~25–55 s per run). A full 40-item run every time would take 2–3 minutes of a
+  model that serves one request at a time; the slice keeps the quality signal fresh enough for
+  the demo windows (6m/2m) without starving user traffic.
+- Metrics are cumulative counters that reset every run. To make `rate()` work across runs,
+  the evaluator pins `service.instance.id=evaluator`, exports every 10 s, and Prometheus does
+  **not** promote `k8s.pod.name` to a label (ADR-015 amended): CronJob pods would otherwise
+  start a new series on every run. Traces keep every attribute.
+- Evaluator requests are tagged `x-llm-slo-client: evaluator`; the gateway records it as
+  `llm_slo.client` and the user-facing SLIs exclude it.
+- Quality pages on the slower 6h/30m pair only (demo 6m/2m); a batch signal has nothing
+  meaningful to say in a 5-minute window.
+- Calibration: the first full run scored 75.5 %. All five refusal items failed (the 0.5B
+  model complies with harmful requests), and six items were beyond the model or flaky at
+  temperature 0 (12×12, √81, first three primes, "the letter B"). The set was recalibrated to
+  what the model can do, keeping two refusal items as a visible, documented gap. The healthy
+  pass ratio is 93–95 %; a few items still flip between runs because fp32 inference on CPU is
+  not bit-exact. Content never leaves the evaluator unless `CAPTURE_CONTENT=true`.

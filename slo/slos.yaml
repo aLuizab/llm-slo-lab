@@ -61,9 +61,11 @@ slos:
       A request is good when the gateway returns a non-error, non-empty, non-truncated
       response. Upstream errors, timeouts, empty bodies, truncation at max_tokens and injected
       faults are bad events.
+    # Synthetic evaluator traffic (llm_slo_client="evaluator") is excluded from the user-facing
+    # SLIs; it has its own SLI (quality).
     sli:
-      good: sum(rate(llm_slo_requests_total{llm_slo_outcome="success"}[{window}]))
-      total: sum(rate(llm_slo_requests_total[{window}]))
+      good: sum(rate(llm_slo_requests_total{llm_slo_outcome="success", llm_slo_client!="evaluator"}[{window}]))
+      total: sum(rate(llm_slo_requests_total{llm_slo_client!="evaluator"}[{window}]))
 
   - name: responsiveness
     objective: 0.95
@@ -71,8 +73,10 @@ slos:
       Time to first token below the profile threshold. Only requests that produced a first
       token are counted here; failures are already bad events for availability.
     sli:
-      good: sum(rate(gen_ai_server_time_to_first_token_seconds_bucket{le="{ttft_threshold_s}"}[{window}]))
-      total: sum(rate(gen_ai_server_time_to_first_token_seconds_count[{window}]))
+      good: >-
+        sum(rate(gen_ai_server_time_to_first_token_seconds_bucket{le="{ttft_threshold_s}",
+        llm_slo_client!="evaluator"}[{window}]))
+      total: sum(rate(gen_ai_server_time_to_first_token_seconds_count{llm_slo_client!="evaluator"}[{window}]))
 
   - name: throughput
     objective: 0.90
@@ -81,9 +85,10 @@ slos:
       first token.
     sli:
       good: >-
-        sum(rate(llm_slo_output_tokens_per_second_count[{window}]))
-        - sum(rate(llm_slo_output_tokens_per_second_bucket{le="{tokens_per_s_threshold}"}[{window}]))
-      total: sum(rate(llm_slo_output_tokens_per_second_count[{window}]))
+        sum(rate(llm_slo_output_tokens_per_second_count{llm_slo_client!="evaluator"}[{window}]))
+        - sum(rate(llm_slo_output_tokens_per_second_bucket{le="{tokens_per_s_threshold}",
+        llm_slo_client!="evaluator"}[{window}]))
+      total: sum(rate(llm_slo_output_tokens_per_second_count{llm_slo_client!="evaluator"}[{window}]))
     # With a 90% objective the error budget is 10%, so a burn rate above 10x is impossible
     # (it would need more than 100% bad events). 14.4x/6x become 8x/5x.
     burn_rates:
@@ -103,9 +108,10 @@ slos:
     sli:
       good: sum(rate(llm_slo_eval_checks_total{llm_slo_eval_result="pass"}[{window}]))
       total: sum(rate(llm_slo_eval_checks_total[{window}]))
-    burn_rates:  # same reasoning as throughput
+    # Same 10% budget reasoning as throughput. Quality is a batch signal (a CronJob every few
+    # minutes), so the fast 1h/5m pair is meaningless: only the slower pair pages.
+    burn_rates:
       page:
-        - {long: 1h, short: 5m, factor: 8}
         - {long: 6h, short: 30m, factor: 5}
       ticket:
         - {long: 1d, short: 2h, factor: 3}

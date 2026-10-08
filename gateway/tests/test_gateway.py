@@ -278,6 +278,19 @@ async def test_in_flight_gauge_during_request(make_gateway):
     assert metrics_by_name(reader)[semconv.METRIC_REQUESTS_IN_FLIGHT][0].value == 0
 
 
+async def test_client_attribute_from_header(gateway):
+    client, reader, spans = gateway
+    await _stream(client)
+    await _stream(client, headers={"x-llm-slo-client": "evaluator"})
+    await _stream(client, headers={"x-llm-slo-client": "Not Valid!"})
+    m = metrics_by_name(reader)
+    by_client = {p.attributes[semconv.ATTR_CLIENT]: p.value for p in m[semconv.METRIC_REQUESTS]}
+    assert by_client == {"user": 2, "evaluator": 1}
+    # only one server span + one chat span per request (no per-chunk send/receive spans)
+    names = sorted(s.name for s in spans.get_finished_spans())
+    assert names == sorted(["POST /v1/chat/completions", "chat mock-llm"] * 3)
+
+
 async def test_bad_request(gateway):
     client, _, _ = gateway
     r = await client.post("/v1/chat/completions", json={"model": "x"})

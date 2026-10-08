@@ -19,57 +19,57 @@ spec:
         slo_mode: prod
         slo_profile: cpu
     - record: slo:sli_error:ratio_rate5m
-      expr: clamp_min(1 - (sum(rate(llm_slo_requests_total{llm_slo_outcome="success"}[5m]))) / (sum(rate(llm_slo_requests_total[5m]))),
-        0)
+      expr: clamp_min(1 - (sum(rate(llm_slo_requests_total{llm_slo_outcome="success", llm_slo_client!="evaluator"}[5m])))
+        / (sum(rate(llm_slo_requests_total{llm_slo_client!="evaluator"}[5m]))), 0)
       labels: *id001
     - record: slo:burn_rate:rate5m
       expr: slo:sli_error:ratio_rate5m{sli="availability"} / 0.01
       labels: *id001
     - record: slo:sli_error:ratio_rate30m
-      expr: clamp_min(1 - (sum(rate(llm_slo_requests_total{llm_slo_outcome="success"}[30m]))) / (sum(rate(llm_slo_requests_total[30m]))),
-        0)
+      expr: clamp_min(1 - (sum(rate(llm_slo_requests_total{llm_slo_outcome="success", llm_slo_client!="evaluator"}[30m])))
+        / (sum(rate(llm_slo_requests_total{llm_slo_client!="evaluator"}[30m]))), 0)
       labels: *id001
     - record: slo:burn_rate:rate30m
       expr: slo:sli_error:ratio_rate30m{sli="availability"} / 0.01
       labels: *id001
     - record: slo:sli_error:ratio_rate1h
-      expr: clamp_min(1 - (sum(rate(llm_slo_requests_total{llm_slo_outcome="success"}[1h]))) / (sum(rate(llm_slo_requests_total[1h]))),
-        0)
+      expr: clamp_min(1 - (sum(rate(llm_slo_requests_total{llm_slo_outcome="success", llm_slo_client!="evaluator"}[1h])))
+        / (sum(rate(llm_slo_requests_total{llm_slo_client!="evaluator"}[1h]))), 0)
       labels: *id001
     - record: slo:burn_rate:rate1h
       expr: slo:sli_error:ratio_rate1h{sli="availability"} / 0.01
       labels: *id001
     - record: slo:sli_error:ratio_rate2h
-      expr: clamp_min(1 - (sum(rate(llm_slo_requests_total{llm_slo_outcome="success"}[2h]))) / (sum(rate(llm_slo_requests_total[2h]))),
-        0)
+      expr: clamp_min(1 - (sum(rate(llm_slo_requests_total{llm_slo_outcome="success", llm_slo_client!="evaluator"}[2h])))
+        / (sum(rate(llm_slo_requests_total{llm_slo_client!="evaluator"}[2h]))), 0)
       labels: *id001
     - record: slo:burn_rate:rate2h
       expr: slo:sli_error:ratio_rate2h{sli="availability"} / 0.01
       labels: *id001
     - record: slo:sli_error:ratio_rate6h
-      expr: clamp_min(1 - (sum(rate(llm_slo_requests_total{llm_slo_outcome="success"}[6h]))) / (sum(rate(llm_slo_requests_total[6h]))),
-        0)
+      expr: clamp_min(1 - (sum(rate(llm_slo_requests_total{llm_slo_outcome="success", llm_slo_client!="evaluator"}[6h])))
+        / (sum(rate(llm_slo_requests_total{llm_slo_client!="evaluator"}[6h]))), 0)
       labels: *id001
     - record: slo:burn_rate:rate6h
       expr: slo:sli_error:ratio_rate6h{sli="availability"} / 0.01
       labels: *id001
     - record: slo:sli_error:ratio_rate1d
-      expr: clamp_min(1 - (sum(rate(llm_slo_requests_total{llm_slo_outcome="success"}[1d]))) / (sum(rate(llm_slo_requests_total[1d]))),
-        0)
+      expr: clamp_min(1 - (sum(rate(llm_slo_requests_total{llm_slo_outcome="success", llm_slo_client!="evaluator"}[1d])))
+        / (sum(rate(llm_slo_requests_total{llm_slo_client!="evaluator"}[1d]))), 0)
       labels: *id001
     - record: slo:burn_rate:rate1d
       expr: slo:sli_error:ratio_rate1d{sli="availability"} / 0.01
       labels: *id001
     - record: slo:sli_error:ratio_rate3d
-      expr: clamp_min(1 - (sum(rate(llm_slo_requests_total{llm_slo_outcome="success"}[3d]))) / (sum(rate(llm_slo_requests_total[3d]))),
-        0)
+      expr: clamp_min(1 - (sum(rate(llm_slo_requests_total{llm_slo_outcome="success", llm_slo_client!="evaluator"}[3d])))
+        / (sum(rate(llm_slo_requests_total{llm_slo_client!="evaluator"}[3d]))), 0)
       labels: *id001
     - record: slo:burn_rate:rate3d
       expr: slo:sli_error:ratio_rate3d{sli="availability"} / 0.01
       labels: *id001
     - record: slo:sli_error:ratio_rate30d
-      expr: clamp_min(1 - (sum(rate(llm_slo_requests_total{llm_slo_outcome="success"}[30d]))) / (sum(rate(llm_slo_requests_total[30d]))),
-        0)
+      expr: clamp_min(1 - (sum(rate(llm_slo_requests_total{llm_slo_outcome="success", llm_slo_client!="evaluator"}[30d])))
+        / (sum(rate(llm_slo_requests_total{llm_slo_client!="evaluator"}[30d]))), 0)
       labels: *id001
     - record: slo:burn_rate:rate30d
       expr: slo:sli_error:ratio_rate30d{sli="availability"} / 0.01
@@ -84,57 +84,57 @@ spec:
         slo_mode: prod
         slo_profile: cpu
     - record: slo:sli_error:ratio_rate5m
-      expr: clamp_min(1 - (sum(rate(gen_ai_server_time_to_first_token_seconds_bucket{le="2"}[5m]))) / (sum(rate(gen_ai_server_time_to_first_token_seconds_count[5m]))),
-        0)
+      expr: clamp_min(1 - (sum(rate(gen_ai_server_time_to_first_token_seconds_bucket{le="2", llm_slo_client!="evaluator"}[5m])))
+        / (sum(rate(gen_ai_server_time_to_first_token_seconds_count{llm_slo_client!="evaluator"}[5m]))), 0)
       labels: *id002
     - record: slo:burn_rate:rate5m
       expr: slo:sli_error:ratio_rate5m{sli="responsiveness"} / 0.05
       labels: *id002
     - record: slo:sli_error:ratio_rate30m
-      expr: clamp_min(1 - (sum(rate(gen_ai_server_time_to_first_token_seconds_bucket{le="2"}[30m]))) / (sum(rate(gen_ai_server_time_to_first_token_seconds_count[30m]))),
-        0)
+      expr: clamp_min(1 - (sum(rate(gen_ai_server_time_to_first_token_seconds_bucket{le="2", llm_slo_client!="evaluator"}[30m])))
+        / (sum(rate(gen_ai_server_time_to_first_token_seconds_count{llm_slo_client!="evaluator"}[30m]))), 0)
       labels: *id002
     - record: slo:burn_rate:rate30m
       expr: slo:sli_error:ratio_rate30m{sli="responsiveness"} / 0.05
       labels: *id002
     - record: slo:sli_error:ratio_rate1h
-      expr: clamp_min(1 - (sum(rate(gen_ai_server_time_to_first_token_seconds_bucket{le="2"}[1h]))) / (sum(rate(gen_ai_server_time_to_first_token_seconds_count[1h]))),
-        0)
+      expr: clamp_min(1 - (sum(rate(gen_ai_server_time_to_first_token_seconds_bucket{le="2", llm_slo_client!="evaluator"}[1h])))
+        / (sum(rate(gen_ai_server_time_to_first_token_seconds_count{llm_slo_client!="evaluator"}[1h]))), 0)
       labels: *id002
     - record: slo:burn_rate:rate1h
       expr: slo:sli_error:ratio_rate1h{sli="responsiveness"} / 0.05
       labels: *id002
     - record: slo:sli_error:ratio_rate2h
-      expr: clamp_min(1 - (sum(rate(gen_ai_server_time_to_first_token_seconds_bucket{le="2"}[2h]))) / (sum(rate(gen_ai_server_time_to_first_token_seconds_count[2h]))),
-        0)
+      expr: clamp_min(1 - (sum(rate(gen_ai_server_time_to_first_token_seconds_bucket{le="2", llm_slo_client!="evaluator"}[2h])))
+        / (sum(rate(gen_ai_server_time_to_first_token_seconds_count{llm_slo_client!="evaluator"}[2h]))), 0)
       labels: *id002
     - record: slo:burn_rate:rate2h
       expr: slo:sli_error:ratio_rate2h{sli="responsiveness"} / 0.05
       labels: *id002
     - record: slo:sli_error:ratio_rate6h
-      expr: clamp_min(1 - (sum(rate(gen_ai_server_time_to_first_token_seconds_bucket{le="2"}[6h]))) / (sum(rate(gen_ai_server_time_to_first_token_seconds_count[6h]))),
-        0)
+      expr: clamp_min(1 - (sum(rate(gen_ai_server_time_to_first_token_seconds_bucket{le="2", llm_slo_client!="evaluator"}[6h])))
+        / (sum(rate(gen_ai_server_time_to_first_token_seconds_count{llm_slo_client!="evaluator"}[6h]))), 0)
       labels: *id002
     - record: slo:burn_rate:rate6h
       expr: slo:sli_error:ratio_rate6h{sli="responsiveness"} / 0.05
       labels: *id002
     - record: slo:sli_error:ratio_rate1d
-      expr: clamp_min(1 - (sum(rate(gen_ai_server_time_to_first_token_seconds_bucket{le="2"}[1d]))) / (sum(rate(gen_ai_server_time_to_first_token_seconds_count[1d]))),
-        0)
+      expr: clamp_min(1 - (sum(rate(gen_ai_server_time_to_first_token_seconds_bucket{le="2", llm_slo_client!="evaluator"}[1d])))
+        / (sum(rate(gen_ai_server_time_to_first_token_seconds_count{llm_slo_client!="evaluator"}[1d]))), 0)
       labels: *id002
     - record: slo:burn_rate:rate1d
       expr: slo:sli_error:ratio_rate1d{sli="responsiveness"} / 0.05
       labels: *id002
     - record: slo:sli_error:ratio_rate3d
-      expr: clamp_min(1 - (sum(rate(gen_ai_server_time_to_first_token_seconds_bucket{le="2"}[3d]))) / (sum(rate(gen_ai_server_time_to_first_token_seconds_count[3d]))),
-        0)
+      expr: clamp_min(1 - (sum(rate(gen_ai_server_time_to_first_token_seconds_bucket{le="2", llm_slo_client!="evaluator"}[3d])))
+        / (sum(rate(gen_ai_server_time_to_first_token_seconds_count{llm_slo_client!="evaluator"}[3d]))), 0)
       labels: *id002
     - record: slo:burn_rate:rate3d
       expr: slo:sli_error:ratio_rate3d{sli="responsiveness"} / 0.05
       labels: *id002
     - record: slo:sli_error:ratio_rate30d
-      expr: clamp_min(1 - (sum(rate(gen_ai_server_time_to_first_token_seconds_bucket{le="2"}[30d]))) / (sum(rate(gen_ai_server_time_to_first_token_seconds_count[30d]))),
-        0)
+      expr: clamp_min(1 - (sum(rate(gen_ai_server_time_to_first_token_seconds_bucket{le="2", llm_slo_client!="evaluator"}[30d])))
+        / (sum(rate(gen_ai_server_time_to_first_token_seconds_count{llm_slo_client!="evaluator"}[30d]))), 0)
       labels: *id002
     - record: slo:burn_rate:rate30d
       expr: slo:sli_error:ratio_rate30d{sli="responsiveness"} / 0.05
@@ -149,57 +149,65 @@ spec:
         slo_mode: prod
         slo_profile: cpu
     - record: slo:sli_error:ratio_rate5m
-      expr: clamp_min(1 - (sum(rate(llm_slo_output_tokens_per_second_count[5m])) - sum(rate(llm_slo_output_tokens_per_second_bucket{le="3"}[5m])))
-        / (sum(rate(llm_slo_output_tokens_per_second_count[5m]))), 0)
+      expr: clamp_min(1 - (sum(rate(llm_slo_output_tokens_per_second_count{llm_slo_client!="evaluator"}[5m])) -
+        sum(rate(llm_slo_output_tokens_per_second_bucket{le="3", llm_slo_client!="evaluator"}[5m]))) / (sum(rate(llm_slo_output_tokens_per_second_count{llm_slo_client!="evaluator"}[5m]))),
+        0)
       labels: *id003
     - record: slo:burn_rate:rate5m
       expr: slo:sli_error:ratio_rate5m{sli="throughput"} / 0.1
       labels: *id003
     - record: slo:sli_error:ratio_rate30m
-      expr: clamp_min(1 - (sum(rate(llm_slo_output_tokens_per_second_count[30m])) - sum(rate(llm_slo_output_tokens_per_second_bucket{le="3"}[30m])))
-        / (sum(rate(llm_slo_output_tokens_per_second_count[30m]))), 0)
+      expr: clamp_min(1 - (sum(rate(llm_slo_output_tokens_per_second_count{llm_slo_client!="evaluator"}[30m])) -
+        sum(rate(llm_slo_output_tokens_per_second_bucket{le="3", llm_slo_client!="evaluator"}[30m]))) / (sum(rate(llm_slo_output_tokens_per_second_count{llm_slo_client!="evaluator"}[30m]))),
+        0)
       labels: *id003
     - record: slo:burn_rate:rate30m
       expr: slo:sli_error:ratio_rate30m{sli="throughput"} / 0.1
       labels: *id003
     - record: slo:sli_error:ratio_rate1h
-      expr: clamp_min(1 - (sum(rate(llm_slo_output_tokens_per_second_count[1h])) - sum(rate(llm_slo_output_tokens_per_second_bucket{le="3"}[1h])))
-        / (sum(rate(llm_slo_output_tokens_per_second_count[1h]))), 0)
+      expr: clamp_min(1 - (sum(rate(llm_slo_output_tokens_per_second_count{llm_slo_client!="evaluator"}[1h])) -
+        sum(rate(llm_slo_output_tokens_per_second_bucket{le="3", llm_slo_client!="evaluator"}[1h]))) / (sum(rate(llm_slo_output_tokens_per_second_count{llm_slo_client!="evaluator"}[1h]))),
+        0)
       labels: *id003
     - record: slo:burn_rate:rate1h
       expr: slo:sli_error:ratio_rate1h{sli="throughput"} / 0.1
       labels: *id003
     - record: slo:sli_error:ratio_rate2h
-      expr: clamp_min(1 - (sum(rate(llm_slo_output_tokens_per_second_count[2h])) - sum(rate(llm_slo_output_tokens_per_second_bucket{le="3"}[2h])))
-        / (sum(rate(llm_slo_output_tokens_per_second_count[2h]))), 0)
+      expr: clamp_min(1 - (sum(rate(llm_slo_output_tokens_per_second_count{llm_slo_client!="evaluator"}[2h])) -
+        sum(rate(llm_slo_output_tokens_per_second_bucket{le="3", llm_slo_client!="evaluator"}[2h]))) / (sum(rate(llm_slo_output_tokens_per_second_count{llm_slo_client!="evaluator"}[2h]))),
+        0)
       labels: *id003
     - record: slo:burn_rate:rate2h
       expr: slo:sli_error:ratio_rate2h{sli="throughput"} / 0.1
       labels: *id003
     - record: slo:sli_error:ratio_rate6h
-      expr: clamp_min(1 - (sum(rate(llm_slo_output_tokens_per_second_count[6h])) - sum(rate(llm_slo_output_tokens_per_second_bucket{le="3"}[6h])))
-        / (sum(rate(llm_slo_output_tokens_per_second_count[6h]))), 0)
+      expr: clamp_min(1 - (sum(rate(llm_slo_output_tokens_per_second_count{llm_slo_client!="evaluator"}[6h])) -
+        sum(rate(llm_slo_output_tokens_per_second_bucket{le="3", llm_slo_client!="evaluator"}[6h]))) / (sum(rate(llm_slo_output_tokens_per_second_count{llm_slo_client!="evaluator"}[6h]))),
+        0)
       labels: *id003
     - record: slo:burn_rate:rate6h
       expr: slo:sli_error:ratio_rate6h{sli="throughput"} / 0.1
       labels: *id003
     - record: slo:sli_error:ratio_rate1d
-      expr: clamp_min(1 - (sum(rate(llm_slo_output_tokens_per_second_count[1d])) - sum(rate(llm_slo_output_tokens_per_second_bucket{le="3"}[1d])))
-        / (sum(rate(llm_slo_output_tokens_per_second_count[1d]))), 0)
+      expr: clamp_min(1 - (sum(rate(llm_slo_output_tokens_per_second_count{llm_slo_client!="evaluator"}[1d])) -
+        sum(rate(llm_slo_output_tokens_per_second_bucket{le="3", llm_slo_client!="evaluator"}[1d]))) / (sum(rate(llm_slo_output_tokens_per_second_count{llm_slo_client!="evaluator"}[1d]))),
+        0)
       labels: *id003
     - record: slo:burn_rate:rate1d
       expr: slo:sli_error:ratio_rate1d{sli="throughput"} / 0.1
       labels: *id003
     - record: slo:sli_error:ratio_rate3d
-      expr: clamp_min(1 - (sum(rate(llm_slo_output_tokens_per_second_count[3d])) - sum(rate(llm_slo_output_tokens_per_second_bucket{le="3"}[3d])))
-        / (sum(rate(llm_slo_output_tokens_per_second_count[3d]))), 0)
+      expr: clamp_min(1 - (sum(rate(llm_slo_output_tokens_per_second_count{llm_slo_client!="evaluator"}[3d])) -
+        sum(rate(llm_slo_output_tokens_per_second_bucket{le="3", llm_slo_client!="evaluator"}[3d]))) / (sum(rate(llm_slo_output_tokens_per_second_count{llm_slo_client!="evaluator"}[3d]))),
+        0)
       labels: *id003
     - record: slo:burn_rate:rate3d
       expr: slo:sli_error:ratio_rate3d{sli="throughput"} / 0.1
       labels: *id003
     - record: slo:sli_error:ratio_rate30d
-      expr: clamp_min(1 - (sum(rate(llm_slo_output_tokens_per_second_count[30d])) - sum(rate(llm_slo_output_tokens_per_second_bucket{le="3"}[30d])))
-        / (sum(rate(llm_slo_output_tokens_per_second_count[30d]))), 0)
+      expr: clamp_min(1 - (sum(rate(llm_slo_output_tokens_per_second_count{llm_slo_client!="evaluator"}[30d])) -
+        sum(rate(llm_slo_output_tokens_per_second_bucket{le="3", llm_slo_client!="evaluator"}[30d]))) / (sum(rate(llm_slo_output_tokens_per_second_count{llm_slo_client!="evaluator"}[30d]))),
+        0)
       labels: *id003
     - record: slo:burn_rate:rate30d
       expr: slo:sli_error:ratio_rate30d{sli="throughput"} / 0.1
@@ -369,8 +377,7 @@ spec:
           threshold, measured per request after the first token.
         runbook: docs/framework.md
     - alert: LLMQualityBurnRatePage
-      expr: (slo:burn_rate:rate1h{sli="quality"} > 8 and slo:burn_rate:rate5m{sli="quality"} > 8) or (slo:burn_rate:rate6h{sli="quality"}
-        > 5 and slo:burn_rate:rate30m{sli="quality"} > 5)
+      expr: (slo:burn_rate:rate6h{sli="quality"} > 5 and slo:burn_rate:rate30m{sli="quality"} > 5)
       for: 2m
       labels:
         severity: page
@@ -379,9 +386,9 @@ spec:
         slo_profile: cpu
       annotations:
         summary: quality SLO (90%) is burning error budget at {{ $value | printf "%.1f" }}x
-        description: 'Windows 1h/5m at 8x or 6h/30m at 5x (prod windows). Deterministic evaluation checks (eval/golden.jsonl)
-          passing: keywords present, valid JSON matching a schema, refusal when required, length cap. A proxy for
-          quality, not a measure of it (see README limitations).'
+        description: 'Windows 6h/30m at 5x (prod windows). Deterministic evaluation checks (eval/golden.jsonl) passing:
+          keywords present, valid JSON matching a schema, refusal when required, length cap. A proxy for quality,
+          not a measure of it (see README limitations).'
         runbook: docs/framework.md
     - alert: LLMQualityBurnRateTicket
       expr: (slo:burn_rate:rate1d{sli="quality"} > 3 and slo:burn_rate:rate2h{sli="quality"} > 3) or (slo:burn_rate:rate3d{sli="quality"}

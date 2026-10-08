@@ -1,0 +1,45 @@
+---
+# Quality signal: every 2 minutes, run a rotating 12-item slice of golden.jsonl through the
+# gateway at temperature 0 and emit pass/fail counters over OTLP. A full pass over the 40
+# items takes 4 runs. `make eval-run` starts one run immediately (used by make break-quality).
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: evaluator
+  namespace: llm
+  labels: {app: evaluator}
+spec:
+  schedule: "*/2 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      activeDeadlineSeconds: 300
+      ttlSecondsAfterFinished: 1800
+      template:
+        metadata:
+          labels: {app: evaluator}
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: evaluator
+              image: llm-slo-lab/evaluator:dev
+              imagePullPolicy: IfNotPresent
+              env:
+                - {name: GATEWAY_URL, value: http://llm-gateway.llm.svc}
+                - {name: EVAL_SAMPLE, value: "12"}
+                - {name: EVAL_MAX_TOKENS, value: "64"}
+                - {name: EVAL_TIMEOUT_S, value: "120"}
+                - {name: CAPTURE_CONTENT, value: "false"}
+                - {name: OTEL_SERVICE_NAME, value: llm-evaluator}
+                - {name: OTEL_EXPORTER_OTLP_ENDPOINT, value: http://otel-collector.observability.svc:4318}
+                - {name: OTEL_EXPORTER_OTLP_PROTOCOL, value: http/protobuf}
+                # fixed instance id: every run continues the same Prometheus series
+                - {name: OTEL_RESOURCE_ATTRIBUTES, value: service.instance.id=evaluator}
+                # several samples per run, so rate() over a 1-2 minute window has data
+                - {name: OTEL_METRIC_EXPORT_INTERVAL, value: "10000"}
+              resources:
+                requests: {cpu: 50m, memory: 64Mi}
+                limits: {cpu: 500m, memory: 192Mi}
