@@ -1,0 +1,25 @@
+---
+# oci://ghcr.io/kserve/charts/kserve-resources
+# Standard mode (ex RawDeployment): plain Deployments + Services, no Knative, no Istio.
+# The lab only talks to the predictor Service in-cluster, so no Ingress/HTTPRoute is created
+# (ADR-003 / ADR-012).
+kserve:
+  controller:
+    deploymentMode: Standard
+    gateway:
+      disableIngressCreation: true
+      ingressGateway:
+        enableGatewayApi: false
+    resources:
+      requests: {cpu: 50m, memory: 200Mi}
+      limits: {cpu: 500m, memory: 400Mi}
+    rbacProxy:
+      resources:
+        requests: {cpu: 10m, memory: 64Mi}
+        limits: {cpu: 100m, memory: 128Mi}
+  # Defaults applied to predictor containers that do not set resources. The InferenceServices
+  # in model/ always set their own, so these only matter as a safety net.
+  inferenceservice:
+    resources:
+      requests: {cpu: "1", memory: 2Gi}
+      limits: {cpu: "2", memory: 3Gi}

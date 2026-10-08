@@ -178,3 +178,59 @@ Development machine: Windows 11 laptop, 12 logical CPUs, 15.7 GB RAM, NVIDIA RTX
 The CPU has AVX2 but **no AVX-512** (relevant for vLLM CPU builds; the HF backend does not
 care). Docker runs natively inside WSL (systemd), not Docker Desktop. No sudo was needed for
 the toolchain: every binary is installed to `~/.local/bin` (`scripts/install-tools.sh`).
+
+Measured after Phase 1 (kind + cert-manager + KServe + one predictor replica, idle):
+WSL reports 4.2 GB used; the kind node container reports 5.3 GB (includes page cache).
+Disk: the `kserve/huggingfaceserver:v0.20.0` image is 4.0 GB compressed and **14.2 GB** on
+disk in Docker, plus another copy inside the kind node; model weights 0.95 GB.
+
+## ADR-011: Model weights live in a host-backed PVC, downloaded once by a Job
+
+**Status:** Accepted (2026-10-08)
+
+Options considered: (a) `storageUri: hf://...` and let KServe's storage-initializer download
+on every pod start (simple, but 1 GB per restart and per replica, and a network dependency at
+scale-up time); (b) KServe `LocalModelCache` (needs extra charts, a node group and local PVs;
+more than the lab needs); (c) a `hostPath` PV on the kind node, backed by a host directory via
+a kind `extraMount`, filled once by a Job with `huggingface_hub.snapshot_download`, and
+referenced as `storageUri: pvc://model-cache/<dir>`.
+
+Decision: (c). Weights survive pod restarts, replica scale-up and even `kind delete cluster`
+(the host directory `~/.cache/llm-slo-lab/models` is kept). The predictor runs with
+`HF_HUB_OFFLINE=1`, so a scale-up never touches the network. The PV is `ReadWriteMany` so up
+to 3 replicas can mount it; on a single-node hostPath volume that is safe.
+
+Measured: the download Job took ~10 min unauthenticated (rate limited by the Hub); the
+predictor loads the model from the PVC in ~22 s and is Ready in ~95 s from `kubectl apply`.
+
+## ADR-012: No network controller for KServe
+
+**Status:** Accepted (2026-10-08)
+
+KServe Standard mode documents a network controller (Gateway API + Envoy Gateway, or an
+Ingress controller) as a requirement. The lab only talks to the predictor from inside the
+cluster (gateway → `qwen-predictor.llm.svc`), so it was installed with
+`kserve.controller.gateway.disableIngressCreation=true` and `enableGatewayApi=false`.
+
+Result: the controller reconciles the InferenceService to Ready and creates only the
+Deployment and the ClusterIP Service. No Ingress or HTTPRoute is created, and no error is
+logged. The `URL` column shows the placeholder `http://qwen-llm.example.com`, which is
+cosmetic. With `serving.kserve.io/autoscalerClass: none` no HPA is created either, which is
+what Phase 6 needs so KEDA is the only autoscaler.
+
+## ADR-013: Observed behaviour of the Hugging Face backend (CPU)
+
+**Status:** Accepted (2026-10-08), informs the gateway design
+
+From `make smoke-model` against `kserve/huggingfaceserver:v0.20.0`, `--backend=huggingface`,
+fp32, 3 CPU limit:
+
+- Streaming works at `/openai/v1/chat/completions` with `"stream": true`; one content chunk
+  per token.
+- No `usage` in any chunk, even with `stream_options.include_usage` (ADR-006 confirmed).
+- TTFT 0.36–0.54 s, ~4.5 output tokens/s. This sets the CPU profile thresholds in
+  `slo/slos.yaml` (TTFT < 2 s is comfortably met when healthy, which leaves room for the
+  chaos toggles to break it).
+- `finish_reason` was `length` on both test requests, including one that ended its JSON
+  object cleanly before `max_tokens`. The gateway therefore must not rely on `finish_reason`
+  alone to classify truncation; it also checks for empty output.

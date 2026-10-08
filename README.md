@@ -17,7 +17,7 @@ Português (Brasil): [docs/pt-br/README.md](docs/pt-br/README.md)
 | Phase | Scope | Status |
 |---|---|---|
 | 0 | Toolchain, repo, skeleton, research ADRs | done |
-| 1 | kind cluster, cert-manager, KServe Standard mode, Qwen2.5-0.5B on CPU | pending |
+| 1 | kind cluster, cert-manager, KServe Standard mode, Qwen2.5-0.5B on CPU | done |
 | 2 | mock-llm and llm-gateway (OTel GenAI metrics, traces, cost, fault injection) | pending |
 | 3 | kube-prometheus-stack, OpenTelemetry Collector, Jaeger | pending |
 | 4 | SLIs, SLOs, recording rules, burn-rate alerts, promtool tests | pending |
@@ -29,7 +29,20 @@ Português (Brasil): [docs/pt-br/README.md](docs/pt-br/README.md)
 
 ## Quickstart
 
-_Filled in when the phases above are done. Target: three commands._
+_Filled in when the phases above are done. Target: three commands._ Today:
+
+```bash
+scripts/install-tools.sh   # kind, kubectl, helm, promtool, kubeconform, jq, make, uv — no sudo
+make cluster platform      # kind + cert-manager + KServe (Standard mode)
+make kind-load-hf          # pull the 4 GB runtime image once and load it into kind
+make model-cache model     # download Qwen2.5-0.5B-Instruct into a PVC, deploy the InferenceService
+make smoke-model           # stream a chat completion straight from KServe
+```
+
+Measured on the development laptop (WSL2, 8 CPUs / 12 GB): the model is Ready ~95 s after
+`kubectl apply`, TTFT is 0.4–0.5 s and output is ~4.5 tokens/s on CPU. Idle memory after
+Phase 1 is ~4.2 GB. The runtime image needs ~14 GB of disk in Docker plus a copy in the kind
+node.
 
 ## Architecture
 
@@ -52,7 +65,12 @@ by default is itself an SRE control. See ADR-009 in [docs/decisions.md](docs/dec
 
 ## Limitations
 
-_Documented as each phase lands._
+- CPU inference with a 0.5B model is slow (~4.5 tokens/s) and the model is small; the point is
+  the measurement, not the answers.
+- The KServe Hugging Face backend does not report `usage` in streamed responses, so the
+  gateway counts tokens with the tokenizer (ADR-006). The vLLM/GPU profile does report it.
+- The GPU profile (`model/gpu/`) is documented but was not run (ADR-010).
+- `finish_reason` from the HF backend is not reliable for detecting truncation (ADR-013).
 
 ## Decisions and versions
 

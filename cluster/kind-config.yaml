@@ -1,0 +1,21 @@
+---
+# kind cluster for the lab. Single node: the laptop budget (8 CPUs / 12 GB) does not leave
+# room for a second node, and KServe Standard mode has no multi-node requirement.
+#
+# The model cache lives on the host (~/.cache/llm-slo-lab/models) and is mounted into the
+# node, so deleting and recreating the cluster does not re-download the model weights.
+# Set HOST_MODEL_CACHE before `make cluster` to change the host path.
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: llm-slo-lab
+nodes:
+  - role: control-plane
+    image: kindest/node:v1.36.4
+    extraMounts:
+      - hostPath: ${HOST_MODEL_CACHE}
+        containerPath: /var/lib/llm-slo-lab/models
+    extraPortMappings:
+      # llm-gateway NodePort, so loadgen can run on the host without a port-forward
+      - containerPort: 30080
+        hostPort: 30080
+        protocol: TCP

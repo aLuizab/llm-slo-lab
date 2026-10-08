@@ -1,0 +1,30 @@
+---
+# Model cache. The PV points at the kind node path that cluster/kind-config.yaml mounts from
+# the host, so weights survive pod restarts, predictor rescheduling and even cluster
+# recreation. ReadWriteMany because up to 3 predictor replicas mount it (KEDA, Phase 6);
+# on a single-node hostPath volume that is safe.
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: model-cache
+spec:
+  capacity:
+    storage: 10Gi
+  accessModes: [ReadWriteMany]
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: model-cache
+  hostPath:
+    path: /var/lib/llm-slo-lab/models
+    type: DirectoryOrCreate
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: model-cache
+  namespace: llm
+spec:
+  accessModes: [ReadWriteMany]
+  storageClassName: model-cache
+  resources:
+    requests:
+      storage: 10Gi

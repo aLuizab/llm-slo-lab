@@ -1,0 +1,10 @@
+---
+# oci://ghcr.io/kserve/charts/kserve-runtime-configs
+# Installs the ClusterServingRuntimes. They are inert objects (no pods) until an
+# InferenceService references one, so leaving the others enabled costs nothing.
+kserve:
+  servingruntime:
+    enabled: true
+    huggingfaceserver:
+      image: kserve/huggingfaceserver
+      tag: v0.20.0

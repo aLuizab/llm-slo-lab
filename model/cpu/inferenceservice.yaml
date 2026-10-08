@@ -1,0 +1,33 @@
+---
+# CPU profile: KServe Hugging Face runtime, plain transformers backend (no vLLM), fp32.
+# Served model name: qwen2.5-0.5b-instruct (OpenAI `model` field).
+# Weights come from the model-cache PVC (model/model-cache.yaml, filled by model/download-job.yaml).
+apiVersion: serving.kserve.io/v1beta1
+kind: InferenceService
+metadata:
+  name: qwen
+  namespace: llm
+  annotations:
+    # Phase 1: no autoscaler at all. Phase 6 switches this to `keda` (ADR-008).
+    serving.kserve.io/autoscalerClass: none
+spec:
+  predictor:
+    minReplicas: 1
+    maxReplicas: 3
+    model:
+      modelFormat:
+        name: huggingface
+      storageUri: pvc://model-cache/qwen2.5-0.5b-instruct
+      args:
+        - --model_name=qwen2.5-0.5b-instruct
+        - --backend=huggingface
+        - --dtype=float32
+        - --max_model_len=2048
+      env:
+        - name: HF_HUB_OFFLINE
+          value: "1"
+        - name: OMP_NUM_THREADS
+          value: "3"
+      resources:
+        requests: {cpu: "2", memory: 3Gi}
+        limits: {cpu: "3", memory: 4Gi}

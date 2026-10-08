@@ -1,0 +1,17 @@
+---
+# jetstack/cert-manager. Only needed for KServe's webhook certificates.
+crds:
+  enabled: true
+resources:
+  requests: {cpu: 10m, memory: 64Mi}
+  limits: {memory: 256Mi}
+webhook:
+  resources:
+    requests: {cpu: 10m, memory: 32Mi}
+    limits: {memory: 128Mi}
+cainjector:
+  resources:
+    requests: {cpu: 10m, memory: 64Mi}
+    limits: {memory: 256Mi}
+startupapicheck:
+  enabled: false

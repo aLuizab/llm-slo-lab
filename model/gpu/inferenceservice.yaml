@@ -1,0 +1,38 @@
+---
+# GPU profile: KServe Hugging Face runtime with the vLLM backend, bf16.
+# Documented, not exercised in this lab (see model/gpu/README.md). Same served model name as
+# the CPU profile so the gateway, SLOs and dashboards do not change between profiles.
+apiVersion: serving.kserve.io/v1beta1
+kind: InferenceService
+metadata:
+  name: qwen
+  namespace: llm
+  annotations:
+    serving.kserve.io/autoscalerClass: none
+spec:
+  predictor:
+    minReplicas: 1
+    maxReplicas: 2
+    nodeSelector:
+      nvidia.com/gpu.present: "true"
+    tolerations:
+      - key: nvidia.com/gpu
+        operator: Exists
+        effect: NoSchedule
+    model:
+      modelFormat:
+        name: huggingface
+      storageUri: pvc://model-cache/qwen2.5-0.5b-instruct
+      args:
+        - --model_name=qwen2.5-0.5b-instruct
+        - --backend=vllm
+        - --dtype=bfloat16
+        - --max_model_len=4096
+        - --gpu_memory_utilization=0.8
+        - --enable-force-include-usage   # usage in the final stream chunk (ADR-006)
+      env:
+        - name: HF_HUB_OFFLINE
+          value: "1"
+      resources:
+        requests: {cpu: "2", memory: 6Gi, nvidia.com/gpu: "1"}
+        limits: {cpu: "4", memory: 8Gi, nvidia.com/gpu: "1"}
