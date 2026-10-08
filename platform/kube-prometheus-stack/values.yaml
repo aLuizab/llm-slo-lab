@@ -1,0 +1,89 @@
+---
+# prometheus-community/kube-prometheus-stack, lightweight for a laptop.
+# Release name: kube-prometheus-stack, namespace: observability.
+# Metrics arrive via Prometheus' native OTLP receiver (ADR-007); no scrape of the gateway.
+
+defaultRules:
+  create: false  # the lab's own rules live in slo/
+
+# Control-plane scrapes that kind does not expose, and scrapes we do not need.
+kubeApiServer: {enabled: false}
+kubeControllerManager: {enabled: false}
+coreDns: {enabled: false}
+kubeEtcd: {enabled: false}
+kubeScheduler: {enabled: false}
+kubeProxy: {enabled: false}
+nodeExporter: {enabled: false}
+kubelet:
+  enabled: true  # cAdvisor: predictor CPU/memory for the dashboard
+
+kubeStateMetrics:
+  enabled: true  # kube_deployment_status_replicas for the KEDA panel
+kube-state-metrics:
+  resources:
+    requests: {cpu: 10m, memory: 32Mi}
+    limits: {memory: 128Mi}
+
+prometheusOperator:
+  resources:
+    requests: {cpu: 20m, memory: 64Mi}
+    limits: {memory: 256Mi}
+
+prometheus:
+  prometheusSpec:
+    enableOTLPReceiver: true  # --web.enable-otlp-receiver, /api/v1/otlp/v1/metrics
+    otlp:
+      translationStrategy: UnderscoreEscapingWithSuffixes
+      promoteResourceAttributes:
+        - service.name
+        - service.namespace
+        - service.version
+        - service.instance.id
+        - k8s.namespace.name
+        - k8s.pod.name
+        - k8s.deployment.name
+        - k8s.container.name
+    scrapeInterval: 15s
+    evaluationInterval: 15s
+    retention: 2d
+    # Pick up PrometheusRules / ServiceMonitors from any namespace, not only Helm-labelled ones.
+    ruleSelectorNilUsesHelmValues: false
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+    resources:
+      requests: {cpu: 100m, memory: 400Mi}
+      limits: {memory: 1Gi}
+
+alertmanager:
+  enabled: true
+  alertmanagerSpec:
+    retention: 24h
+    resources:
+      requests: {cpu: 10m, memory: 32Mi}
+      limits: {memory: 128Mi}
+
+grafana:
+  enabled: true
+  adminPassword: llm-slo-lab  # lab only
+  defaultDashboardsEnabled: false
+  resources:
+    requests: {cpu: 50m, memory: 128Mi}
+    limits: {memory: 384Mi}
+  grafana.ini:
+    analytics: {check_for_updates: false, reporting_enabled: false}
+    auth.anonymous: {enabled: true, org_role: Viewer}
+    news: {news_feed_enabled: false}
+  sidecar:
+    dashboards:
+      enabled: true
+      label: grafana_dashboard
+      labelValue: "1"
+      searchNamespace: ALL  # dashboards/ ConfigMap lives in the llm namespace
+      folderAnnotation: grafana_folder
+      provider:
+        foldersFromFilesStructure: true
+  additionalDataSources:
+    - name: Jaeger
+      type: jaeger
+      access: proxy
+      url: http://jaeger.observability.svc:16686

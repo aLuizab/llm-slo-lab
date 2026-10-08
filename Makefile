@@ -32,13 +32,37 @@ kind-load-hf: ## Pull the KServe HF runtime image and load it into kind (4 GB, d
 	kind load docker-image $(KSERVE_HF_IMAGE) --name $(CLUSTER_NAME)
 
 # ---------------------------------------------------------------- platform
-platform: platform-cert-manager platform-kserve ## Install every platform component
+.PHONY: platform-monitoring platform-otel platform-jaeger ui loadgen verify-telemetry
+
+platform: platform-cert-manager platform-kserve platform-monitoring platform-jaeger platform-otel ## Install every platform component
 
 platform-cert-manager: ## cert-manager (KServe webhook certs)
 	@scripts/platform.sh cert-manager
 
 platform-kserve: ## KServe CRDs, controller (Standard mode) and serving runtimes
 	@scripts/platform.sh kserve
+
+platform-monitoring: ## kube-prometheus-stack (Prometheus w/ OTLP receiver, Alertmanager, Grafana)
+	@scripts/platform.sh kube-prometheus-stack
+
+platform-jaeger: ## Jaeger v2 all-in-one
+	@scripts/platform.sh jaeger
+
+platform-otel: ## OpenTelemetry Collector (OTLP in; Prometheus + Jaeger out)
+	@scripts/platform.sh otel-collector
+
+ui: ## Port-forward Grafana, Prometheus, Alertmanager, Jaeger and print URLs
+	@scripts/ui.sh
+
+CONCURRENCY ?= 2
+DURATION    ?= 60
+RAMP        ?=
+loadgen: ## Run load through the gateway (CONCURRENCY, DURATION or RAMP=1:60,4:120,1:60)
+	cd loadgen && uv run --frozen python loadgen.py --url http://127.0.0.1:30080 \
+	  $(if $(RAMP),--ramp $(RAMP),--concurrency $(CONCURRENCY) --duration $(DURATION))
+
+verify-telemetry: ## Print PromQL results for every SLI signal and one Jaeger trace
+	@scripts/verify-telemetry.sh
 
 # ---------------------------------------------------------------- model
 model-cache: ## Create the model-cache PV/PVC and download the weights into it (idempotent)

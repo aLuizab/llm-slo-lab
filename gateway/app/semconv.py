@@ -20,7 +20,8 @@ METRIC_SERVER_TIME_PER_OUTPUT_TOKEN = "gen_ai.server.time_per_output_token"  # s
 METRIC_REQUESTS = "llm_slo.requests"  # counter, {request}, attr llm_slo.outcome
 METRIC_REQUESTS_IN_FLIGHT = "llm_slo.requests.in_flight"  # up-down counter, {request}
 METRIC_REQUEST_COST = "llm_slo.request.cost"  # histogram, {USD}, attr llm_slo.cost_model
-METRIC_OUTPUT_TOKEN_RATE = "llm_slo.output_token_rate"  # histogram, {token}/s
+# histogram, unit {token}/s -> Prometheus llm_slo_output_tokens_per_second_*
+METRIC_OUTPUT_TOKEN_RATE = "llm_slo.output_tokens"
 
 # --- GenAI attributes ---------------------------------------------------------------------
 ATTR_OPERATION_NAME = "gen_ai.operation.name"

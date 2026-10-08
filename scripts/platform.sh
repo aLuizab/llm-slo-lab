@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Installs one platform component with Helm. Usage: scripts/platform.sh <component>
-# Components: cert-manager kserve
+# Components: cert-manager kserve kube-prometheus-stack otel-collector jaeger
 # Idempotent: uses `helm upgrade --install`. Versions come from versions.env.
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -8,7 +8,6 @@ cd "$(dirname "$0")/.."
 source versions.env
 
 component="${1:?component}"
-wait_rollout() { kubectl -n "$1" rollout status deploy -l "$2" --timeout=300s; }
 
 case "$component" in
   cert-manager)
@@ -28,6 +27,25 @@ case "$component" in
       -f platform/kserve/values-runtime-configs.yaml --wait
     kubectl -n kserve get deploy
     kubectl get clusterservingruntime kserve-huggingfaceserver
+    ;;
+  kube-prometheus-stack)
+    helm repo add prometheus-community https://prometheus-community.github.io/helm-charts --force-update >/dev/null
+    helm upgrade --install kube-prometheus-stack prometheus-community/kube-prometheus-stack \
+      --namespace observability --create-namespace --version "$KUBE_PROMETHEUS_STACK_VERSION" \
+      -f platform/kube-prometheus-stack/values.yaml --wait --timeout 10m
+    kubectl -n observability get pods
+    ;;
+  otel-collector)
+    helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm-charts --force-update >/dev/null
+    helm upgrade --install otel-collector open-telemetry/opentelemetry-collector \
+      --namespace observability --create-namespace --version "$OTEL_COLLECTOR_CHART_VERSION" \
+      -f platform/otel-collector/values.yaml --wait --timeout 5m
+    kubectl -n observability rollout status deploy/otel-collector --timeout=120s
+    ;;
+  jaeger)
+    kubectl create namespace observability --dry-run=client -o yaml | kubectl apply -f -
+    kubectl apply -f platform/jaeger/jaeger.yaml
+    kubectl -n observability rollout status deploy/jaeger --timeout=300s
     ;;
   *) echo "unknown component: $component" >&2; exit 2 ;;
 esac

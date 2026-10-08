@@ -1,0 +1,42 @@
+---
+# Jaeger v2 all-in-one (built on the OpenTelemetry Collector): in-memory storage, native OTLP
+# on 4317/4318, UI on 16686. The jaegertracing/jaeger Helm chart defaults to Elasticsearch,
+# which is far more than a laptop lab needs, so this is a plain Deployment (ADR-015).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jaeger
+  namespace: observability
+  labels: {app: jaeger}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: jaeger}
+  template:
+    metadata:
+      labels: {app: jaeger}
+    spec:
+      containers:
+        - name: jaeger
+          image: jaegertracing/jaeger:2.22.0
+          ports:
+            - {containerPort: 16686, name: ui}
+            - {containerPort: 4317, name: otlp-grpc}
+            - {containerPort: 4318, name: otlp-http}
+          readinessProbe:
+            httpGet: {path: /, port: ui}
+          resources:
+            requests: {cpu: 50m, memory: 128Mi}
+            limits: {memory: 512Mi}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: jaeger
+  namespace: observability
+spec:
+  selector: {app: jaeger}
+  ports:
+    - {port: 16686, targetPort: ui, name: ui}
+    - {port: 4317, targetPort: otlp-grpc, name: otlp-grpc}
+    - {port: 4318, targetPort: otlp-http, name: otlp-http}

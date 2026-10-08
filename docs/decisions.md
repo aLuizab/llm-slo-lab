@@ -122,7 +122,9 @@ attribute (`upstream` | `tokenizer`).
 
 ## ADR-007: Metrics into Prometheus via the native OTLP receiver
 
-**Status:** Proposed (confirmed in Phase 3)
+**Status:** Accepted (confirmed in Phase 3, 2026-10-08). The names below were verified in
+Prometheus 3.15 exactly as predicted; `{token}/s` became `_per_second`, so the throughput
+histogram is named `llm_slo.output_tokens` to read as `llm_slo_output_tokens_per_second`.
 
 Options: (a) OpenTelemetry Collector `prometheus` exporter + ServiceMonitor scrape, or
 (b) Collector `otlphttp` exporter → Prometheus 3.x native OTLP receiver
@@ -268,3 +270,32 @@ Measured through the gateway to KServe on CPU: TTFT 0.6–0.9 s, ~5.5 output tok
 first request after a rollout, while `kind load` was still importing images on the same node,
 took 17.8 s to the first token; later requests did not reproduce it. Kept as a reminder that
 TTFT on a shared CPU node is sensitive to neighbours, which is exactly what the SLO is for.
+
+## ADR-015: Telemetry pipeline
+
+**Status:** Accepted (2026-10-08)
+
+- **Prometheus native OTLP receiver** (ADR-007) via kube-prometheus-stack 92.1.0:
+  `prometheusSpec.enableOTLPReceiver: true` plus `otlp.promoteResourceAttributes` for
+  `service.*` and `k8s.*`. The Collector exports with `otlp_http` to
+  `/api/v1/otlp`. Resource attribute `service.name` becomes the `job` label.
+- **OpenTelemetry Collector** (chart 0.175.1, contrib 0.162.0) in deployment mode with the
+  `kubernetesAttributes` preset. Collector-contrib ≥ 0.161 renamed components: `otlphttp` →
+  `otlp_http`, the `otlp` exporter → `otlp_grpc`, `k8sattributes` → `k8s_attributes`. The
+  chart rewrites old names with a deprecation warning; the lab uses the new names.
+- **Jaeger v2 all-in-one from a plain manifest** (`jaegertracing/jaeger:2.22.0`, in-memory
+  storage, native OTLP on 4317/4318). The `jaegertracing/jaeger` Helm chart defaults to an
+  Elasticsearch backend, which is more than a laptop needs. Jaeger v2 serves the **v3 query
+  API** (`/api/v3/services`, `/api/v3/traces?query.service_name=...`); the v1 `/api/services`
+  path returns 404, which first looked like "no traces".
+- **Grafana** has Prometheus, Alertmanager and Jaeger datasources; dashboards are picked up
+  from any namespace via the sidecar label `grafana_dashboard=1`. Anonymous viewer access is on
+  for the demo. Default dashboards and default rules are off to keep the stack light.
+- **Measured:** the whole observability stack adds ~1.3 GB (WSL 5.5 GB used after install).
+
+Finding worth a slide: with the plain Hugging Face backend on CPU, two concurrent requests run
+their `generate()` loops in parallel on the same 3 CPUs and *both* slow down; TTFT of the
+second request includes the first one's generation. At concurrency 2 TTFT p50 went from 0.6 s
+to 6.5 s (p95 14.8 s). The predictor is effectively a one-request-at-a-time server, which is why
+the KEDA signal is in-flight requests per replica and why the healthy baseline load is
+concurrency 1 per replica.

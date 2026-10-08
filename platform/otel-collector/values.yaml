@@ -1,0 +1,52 @@
+---
+# open-telemetry/opentelemetry-collector. Receives OTLP from the gateway and the evaluator,
+# enriches with Kubernetes metadata, and fans out: metrics -> Prometheus (native OTLP
+# receiver), traces -> Jaeger (OTLP gRPC). No logs pipeline.
+fullnameOverride: otel-collector
+mode: deployment
+replicaCount: 1
+image:
+  repository: otel/opentelemetry-collector-contrib
+  tag: 0.162.0
+presets:
+  # Adds the k8sattributes processor (+ RBAC) to every pipeline: k8s.pod.name,
+  # k8s.deployment.name, k8s.namespace.name... promoted to labels by Prometheus.
+  kubernetesAttributes:
+    enabled: true
+resources:
+  requests: {cpu: 50m, memory: 128Mi}
+  limits: {memory: 256Mi}
+ports:
+  jaeger-compact: {enabled: false}
+  jaeger-thrift: {enabled: false}
+  jaeger-grpc: {enabled: false}
+  zipkin: {enabled: false}
+config:
+  receivers:
+    jaeger: null
+    zipkin: null
+    prometheus: null
+    otlp:
+      protocols:
+        grpc: {endpoint: 0.0.0.0:4317}
+        http: {endpoint: 0.0.0.0:4318}
+  # Component names follow collector-contrib >= 0.161 (otlphttp -> otlp_http, otlp exporter ->
+  # otlp_grpc, k8sattributes -> k8s_attributes); the chart rewrites old names with a warning.
+  exporters:
+    otlp_http/prometheus:
+      endpoint: http://kube-prometheus-stack-prometheus.observability.svc:9090/api/v1/otlp
+      tls: {insecure: true}
+    otlp_grpc/jaeger:
+      endpoint: jaeger.observability.svc:4317
+      tls: {insecure: true}
+  service:
+    pipelines:
+      logs: null
+      metrics:
+        receivers: [otlp]
+        processors: [memory_limiter, batch]  # k8s_attributes is prepended by the preset
+        exporters: [otlp_http/prometheus]
+      traces:
+        receivers: [otlp]
+        processors: [memory_limiter, batch]
+        exporters: [otlp_grpc/jaeger]

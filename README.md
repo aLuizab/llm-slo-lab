@@ -19,7 +19,7 @@ Português (Brasil): [docs/pt-br/README.md](docs/pt-br/README.md)
 | 0 | Toolchain, repo, skeleton, research ADRs | done |
 | 1 | kind cluster, cert-manager, KServe Standard mode, Qwen2.5-0.5B on CPU | done |
 | 2 | mock-llm and llm-gateway (OTel GenAI metrics, traces, cost, fault injection) | done |
-| 3 | kube-prometheus-stack, OpenTelemetry Collector, Jaeger | pending |
+| 3 | kube-prometheus-stack, OpenTelemetry Collector, Jaeger | done |
 | 4 | SLIs, SLOs, recording rules, burn-rate alerts, promtool tests | pending |
 | 5 | Quality signal: golden dataset and evaluator CronJob | pending |
 | 6 | KEDA autoscaling on in-flight requests | pending |
@@ -40,6 +40,9 @@ make smoke-model           # stream a chat completion straight from KServe
 make images mock gateway   # build mock-llm + llm-gateway, load into kind, deploy
 make smoke                 # stream a chat completion through the gateway (localhost:30080)
 make use-mock | use-model  # point the gateway at mock-llm (offline demo / CI) or the model
+make loadgen CONCURRENCY=1 DURATION=120   # or RAMP=1:60,4:120,1:60
+make verify-telemetry      # PromQL for every SLI signal + one Jaeger trace
+make ui                    # Grafana / Prometheus / Alertmanager / Jaeger port-forwards
 make test lint             # pytest (gateway, mock-llm), ruff, yamllint, kubeconform
 ```
 
@@ -50,7 +53,23 @@ node.
 
 ## Architecture
 
-_Mermaid diagram added in Phase 3._
+```mermaid
+flowchart LR
+    LG[loadgen<br/>async, streaming] -->|OpenAI API| GW[llm-gateway<br/>FastAPI · SLIs · fault injection]
+    EV[evaluator CronJob<br/>golden.jsonl] -->|temperature 0| GW
+    GW -->|/openai/v1/chat/completions| KS[KServe InferenceService<br/>Qwen2.5-0.5B · HF runtime · CPU]
+    GW -.->|offline / CI| MK[mock-llm]
+    GW -->|OTLP| OC[OpenTelemetry Collector]
+    OC -->|OTLP metrics| PR[Prometheus<br/>native OTLP receiver]
+    OC -->|OTLP traces| JG[Jaeger v2]
+    PR --> AM[Alertmanager<br/>burn-rate alerts]
+    PR --> GF[Grafana<br/>LLM SLOs dashboard]
+    PR -->|in-flight per replica| KD[KEDA]
+    KD -->|scales predictor 1..3| KS
+```
+
+`make ui` port-forwards Grafana (3000), Prometheus (9090), Alertmanager (9093) and Jaeger
+(16686); the gateway is reachable at `localhost:30080` through the kind NodePort.
 
 ## The framework
 
@@ -65,7 +84,7 @@ _The SLI → why → how → which CNCF project table lives in [docs/framework.m
 |---|---|---|
 | Time to first token | `gen_ai.server.time_to_first_token` | wall time until the first chunk with content |
 | Time per output token | `gen_ai.server.time_per_output_token` | (end − first token) / (output tokens − 1) |
-| Output tokens/s | `llm_slo.output_token_rate` | inverse of the above, per request |
+| Output tokens/s | `llm_slo.output_tokens` (unit `{token}/s`) | inverse of the above, per request |
 | Duration | `gen_ai.client.operation.duration`, `gen_ai.server.request.duration` | whole request |
 | Tokens | `gen_ai.client.token.usage` (`gen_ai.token.type` = input/output) | upstream `usage` if present, else the model tokenizer (`llm_slo.token_source`) |
 | Outcome | `llm_slo.requests` (`llm_slo.outcome`) | success, upstream_error, timeout, empty, truncated, injected_error |
