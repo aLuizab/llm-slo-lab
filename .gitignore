@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+dist/
+build/
+
+# Local state
+.env
+*.local.yaml
+*.local.env
+kubeconfig*
+.kube/
+.cache/
+.hf-cache/
+models/
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+*:Zone.Identifier
+
+# Generated screenshots are committed under docs/img/ on purpose; raw captures are not
+*.tmp.png
