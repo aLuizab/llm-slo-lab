@@ -60,3 +60,53 @@ model-wait: ## Wait for the InferenceService to be Ready
 
 smoke-model: ## Stream a chat completion straight from KServe
 	@scripts/smoke-model.sh
+
+# ---------------------------------------------------------------- services
+.PHONY: images image-gateway image-mock gateway mock use-model use-mock smoke test lint
+
+image-gateway: ## Build the llm-gateway image and load it into kind
+	docker build -t llm-slo-lab/llm-gateway:dev \
+	  --build-arg MODEL_ID=$(MODEL_ID) --build-arg MODEL_REVISION=$(MODEL_REVISION) \
+	  --build-arg HF_HUB_VERSION=$(HF_HUB_VERSION) gateway
+	kind load docker-image llm-slo-lab/llm-gateway:dev --name $(CLUSTER_NAME)
+
+image-mock: ## Build the mock-llm image and load it into kind
+	docker build -t llm-slo-lab/mock-llm:dev mock-llm
+	kind load docker-image llm-slo-lab/mock-llm:dev --name $(CLUSTER_NAME)
+
+images: image-gateway image-mock ## Build and load both images
+
+gateway: ## Deploy (or redeploy) the llm-gateway
+	kubectl apply -f model/namespace.yaml -f gateway/k8s/
+	kubectl -n $(NAMESPACE) rollout restart deploy/llm-gateway
+	kubectl -n $(NAMESPACE) rollout status deploy/llm-gateway --timeout=120s
+
+mock: ## Deploy (or redeploy) mock-llm
+	kubectl apply -f model/namespace.yaml -f mock-llm/k8s/
+	kubectl -n $(NAMESPACE) rollout restart deploy/mock-llm
+	kubectl -n $(NAMESPACE) rollout status deploy/mock-llm --timeout=120s
+
+use-model: ## Point the gateway at the KServe model
+	kubectl -n $(NAMESPACE) patch cm llm-gateway-env --type merge \
+	  -p '{"data":{"UPSTREAM_URL":"http://qwen-predictor.llm.svc/openai","MODEL_NAME":"qwen2.5-0.5b-instruct","PROVIDER_NAME":"kserve"}}'
+	kubectl -n $(NAMESPACE) rollout restart deploy/llm-gateway
+	kubectl -n $(NAMESPACE) rollout status deploy/llm-gateway --timeout=120s
+
+use-mock: ## Point the gateway at mock-llm (CI / offline demo)
+	kubectl -n $(NAMESPACE) patch cm llm-gateway-env --type merge \
+	  -p '{"data":{"UPSTREAM_URL":"http://mock-llm.llm.svc","MODEL_NAME":"mock-llm","PROVIDER_NAME":"mock"}}'
+	kubectl -n $(NAMESPACE) rollout restart deploy/llm-gateway
+	kubectl -n $(NAMESPACE) rollout status deploy/llm-gateway --timeout=120s
+
+smoke: ## Stream a chat completion through the gateway (localhost:30080)
+	@scripts/smoke.sh
+
+test: ## Unit tests (gateway, mock-llm)
+	cd mock-llm && uv run --frozen pytest -q
+	cd gateway && uv run --frozen pytest -q
+
+lint: ## ruff + yamllint + kubeconform
+	cd gateway && uv run --frozen ruff check . && uv run --frozen ruff format --check .
+	cd mock-llm && uv run --frozen ruff check . && uv run --frozen ruff format --check .
+	yamllint -s .
+	kubeconform -strict -summary -ignore-missing-schemas model/ cluster/ gateway/k8s/ mock-llm/k8s/

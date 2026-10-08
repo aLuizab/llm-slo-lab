@@ -1,0 +1,39 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mock-llm
+  namespace: llm
+  labels: {app: mock-llm}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: mock-llm}
+  template:
+    metadata:
+      labels: {app: mock-llm}
+    spec:
+      containers:
+        - name: mock-llm
+          image: llm-slo-lab/mock-llm:dev
+          imagePullPolicy: IfNotPresent
+          ports: [{containerPort: 8000, name: http}]
+          env:
+            - {name: MOCK_TTFT_MS, value: "300"}
+            - {name: MOCK_INTER_TOKEN_MS, value: "40"}
+            - {name: MOCK_OUTPUT_TOKENS, value: "60"}
+            - {name: MOCK_INCLUDE_USAGE, value: "true"}
+          readinessProbe:
+            httpGet: {path: /healthz, port: http}
+          resources:
+            requests: {cpu: 50m, memory: 64Mi}
+            limits: {cpu: 500m, memory: 128Mi}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mock-llm
+  namespace: llm
+spec:
+  selector: {app: mock-llm}
+  ports: [{port: 80, targetPort: http, name: http}]

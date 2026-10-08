@@ -1,0 +1,12 @@
+line-length = 100
+target-version = "py312"
+
+[lint]
+select = ["E", "F", "I", "B", "UP", "ASYNC", "RUF"]
+ignore = ["RUF012"]
+
+[lint.isort]
+known-first-party = ["app", "mock_llm", "tests", "evaluator", "loadgen"]
+
+[format]
+quote-style = "double"

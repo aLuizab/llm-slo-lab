@@ -1,0 +1,57 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: llm-gateway
+  namespace: llm
+  labels: {app: llm-gateway}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: llm-gateway}
+  template:
+    metadata:
+      labels: {app: llm-gateway}
+    spec:
+      containers:
+        - name: gateway
+          image: llm-slo-lab/llm-gateway:dev
+          imagePullPolicy: IfNotPresent
+          ports: [{containerPort: 8000, name: http}]
+          envFrom:
+            - configMapRef: {name: llm-gateway-env}
+          env:
+            - {name: OTEL_SERVICE_NAME, value: llm-gateway}
+            # OTLP/HTTP to the collector (installed in Phase 3). Unset = no export.
+            - {name: OTEL_EXPORTER_OTLP_ENDPOINT, value: http://otel-collector.observability.svc:4318}
+            - {name: OTEL_EXPORTER_OTLP_PROTOCOL, value: http/protobuf}
+            - {name: COST_MODEL_FILE, value: /etc/llm-gateway/cost-model.yaml}
+            - {name: SYSTEM_PROMPT_FILE, value: /etc/llm-gateway/system-prompt.txt}
+          volumeMounts:
+            - {name: cost-model, mountPath: /etc/llm-gateway/cost-model.yaml, subPath: cost-model.yaml}
+            - {name: system-prompt, mountPath: /etc/llm-gateway/system-prompt.txt, subPath: system-prompt.txt}
+          readinessProbe:
+            httpGet: {path: /readyz, port: http}
+          livenessProbe:
+            httpGet: {path: /healthz, port: http}
+            periodSeconds: 15
+          resources:
+            requests: {cpu: 100m, memory: 192Mi}
+            limits: {cpu: "1", memory: 512Mi}
+      volumes:
+        - name: cost-model
+          configMap: {name: llm-gateway-cost-model}
+        - name: system-prompt
+          configMap: {name: llm-gateway-system-prompt}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: llm-gateway
+  namespace: llm
+  labels: {app: llm-gateway}
+spec:
+  type: NodePort
+  selector: {app: llm-gateway}
+  ports:
+    - {port: 80, targetPort: http, nodePort: 30080, name: http}

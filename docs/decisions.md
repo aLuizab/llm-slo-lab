@@ -234,3 +234,37 @@ fp32, 3 CPU limit:
 - `finish_reason` was `length` on both test requests, including one that ended its JSON
   object cleanly before `max_tokens`. The gateway therefore must not rely on `finish_reason`
   alone to classify truncation; it also checks for empty output.
+
+## ADR-014: Gateway design
+
+**Status:** Accepted (2026-10-08)
+
+- **Proxy, not SDK instrumentation.** The SLIs are measured in a FastAPI proxy
+  (`gateway/`) rather than by instrumenting a client library, because that is where an SRE
+  can measure every caller the same way, add fault injection, and swap the upstream (KServe
+  or `mock-llm`) without touching clients.
+- **Honest status codes for streaming.** The gateway opens the upstream stream and waits for
+  the first SSE line *before* answering the client. Upstream errors and TTFT timeouts therefore
+  become real 502/504 responses instead of a 200 followed by a broken stream. The first line is
+  forwarded immediately, so client-observed TTFT is unchanged. Failures after the first byte
+  are sent as an SSE `event: error` and still counted (outcome `timeout` / `upstream_error`).
+- **Outcome classification.** `success`, `upstream_error`, `timeout`, `empty` (200 with no
+  content), `truncated` (`finish_reason=length` *and* output tokens ≥ requested `max_tokens`,
+  because of ADR-013), `injected_error` (chaos). Everything except `success` is a bad event
+  for the Availability SLI.
+- **Both client and server GenAI metrics** are emitted (ADR-005): the gateway is the serving
+  front door for the application (`gen_ai.server.*` latency histograms, which carry TTFT and
+  time-per-output-token) and a client of the model (`gen_ai.client.operation.duration`,
+  `gen_ai.client.token.usage`).
+- **Providers are instances, not globals**, so tests inject `InMemoryMetricReader` and
+  `InMemorySpanExporter`; 21 gateway tests run against a real `mock-llm` server, and one test
+  runs the gateway itself under uvicorn because httpx's ASGI transport buffers streams.
+- **`x-mock-*` request headers are forwarded** to the upstream so tests and the offline demo
+  can steer `mock-llm` per request (TTFT, errors, length, `usage`); the real model ignores them.
+- **Tokenizer baked into the image** at a pinned model revision (`MODEL_REVISION` in
+  `versions.env`), so counting works offline and is reproducible.
+
+Measured through the gateway to KServe on CPU: TTFT 0.6–0.9 s, ~5.5 output tokens/s. The very
+first request after a rollout, while `kind load` was still importing images on the same node,
+took 17.8 s to the first token; later requests did not reproduce it. Kept as a reminder that
+TTFT on a shared CPU node is sensitive to neighbours, which is exactly what the SLO is for.

@@ -18,7 +18,7 @@ Português (Brasil): [docs/pt-br/README.md](docs/pt-br/README.md)
 |---|---|---|
 | 0 | Toolchain, repo, skeleton, research ADRs | done |
 | 1 | kind cluster, cert-manager, KServe Standard mode, Qwen2.5-0.5B on CPU | done |
-| 2 | mock-llm and llm-gateway (OTel GenAI metrics, traces, cost, fault injection) | pending |
+| 2 | mock-llm and llm-gateway (OTel GenAI metrics, traces, cost, fault injection) | done |
 | 3 | kube-prometheus-stack, OpenTelemetry Collector, Jaeger | pending |
 | 4 | SLIs, SLOs, recording rules, burn-rate alerts, promtool tests | pending |
 | 5 | Quality signal: golden dataset and evaluator CronJob | pending |
@@ -37,6 +37,10 @@ make cluster platform      # kind + cert-manager + KServe (Standard mode)
 make kind-load-hf          # pull the 4 GB runtime image once and load it into kind
 make model-cache model     # download Qwen2.5-0.5B-Instruct into a PVC, deploy the InferenceService
 make smoke-model           # stream a chat completion straight from KServe
+make images mock gateway   # build mock-llm + llm-gateway, load into kind, deploy
+make smoke                 # stream a chat completion through the gateway (localhost:30080)
+make use-mock | use-model  # point the gateway at mock-llm (offline demo / CI) or the model
+make test lint             # pytest (gateway, mock-llm), ruff, yamllint, kubeconform
 ```
 
 Measured on the development laptop (WSL2, 8 CPUs / 12 GB): the model is Ready ~95 s after
@@ -52,9 +56,45 @@ _Mermaid diagram added in Phase 3._
 
 _The SLI → why → how → which CNCF project table lives in [docs/framework.md](docs/framework.md)._
 
+## What the gateway measures
+
+`llm-gateway` is an OpenAI-compatible proxy in front of the model. For every chat completion
+(streaming or not) it records, with OpenTelemetry GenAI semantic conventions (ADR-005):
+
+| Signal | Metric | How |
+|---|---|---|
+| Time to first token | `gen_ai.server.time_to_first_token` | wall time until the first chunk with content |
+| Time per output token | `gen_ai.server.time_per_output_token` | (end − first token) / (output tokens − 1) |
+| Output tokens/s | `llm_slo.output_token_rate` | inverse of the above, per request |
+| Duration | `gen_ai.client.operation.duration`, `gen_ai.server.request.duration` | whole request |
+| Tokens | `gen_ai.client.token.usage` (`gen_ai.token.type` = input/output) | upstream `usage` if present, else the model tokenizer (`llm_slo.token_source`) |
+| Outcome | `llm_slo.requests` (`llm_slo.outcome`) | success, upstream_error, timeout, empty, truncated, injected_error |
+| Cost | `llm_slo.request.cost` (`llm_slo.cost_model`) | see below |
+| Queue depth | `llm_slo.requests.in_flight` | KEDA's scaling signal |
+
+Histogram buckets are tuned for CPU inference (TTFT 0.1 s … 30 s, time per token 10 ms … 2.5 s)
+and are configurable with `GW_BUCKETS_TTFT`, `GW_BUCKETS_TPOT`, `GW_BUCKETS_DURATION`,
+`GW_BUCKETS_TOKENS`, `GW_BUCKETS_COST`, `GW_BUCKETS_TOKEN_RATE` (comma-separated seconds /
+tokens / USD). See `gateway/app/config.py` and `gateway/k8s/configmaps.yaml`.
+
+Empty and truncated responses are **bad events**: a 200 with nothing useful in it is still a
+failure from the user's point of view. Fault injection (`FAULT_ERROR_RATE`,
+`FAULT_EXTRA_LATENCY_MS`) and the system prompt come from ConfigMaps so the chaos toggles can
+flip them. Requests may carry `x-mock-*` headers, which the gateway forwards to `mock-llm`
+(the real model ignores them).
+
 ## Cost assumptions
 
-_All cost figures are assumptions, not real prices. Documented in Phase 2._
+**All cost figures are assumptions, not real prices.** They live in
+`gateway/k8s/configmaps.yaml` and are labelled `llm_slo.cost_model` so you can swap them:
+
+- **amortized**: a node is paid by the hour whether busy or not, so a request's cost is its
+  share of node-time: `node_cost_per_hour / 3600 × duration_s / requests_in_flight`.
+  Default `node_cost_per_hour = 0.40` (a 4 vCPU / 16 GB on-demand VM, rounded).
+- **per_token**: marketplace style, `input_tokens/1000 × 0.00015 + output_tokens/1000 × 0.0006`.
+
+Cost is a budget signal, not an SLO: the rules alert when cost per 1k requests leaves the
+budget, but nobody is paged for it.
 
 ## Privacy by default
 

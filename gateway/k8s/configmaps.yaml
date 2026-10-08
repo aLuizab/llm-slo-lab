@@ -1,0 +1,48 @@
+---
+# Runtime configuration of the gateway. Chaos toggles (make break-*/heal) patch these values
+# and restart the Deployment.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: llm-gateway-env
+  namespace: llm
+data:
+  UPSTREAM_URL: http://qwen-predictor.llm.svc/openai
+  MODEL_NAME: qwen2.5-0.5b-instruct
+  PROVIDER_NAME: kserve
+  CAPTURE_CONTENT: "false"
+  FAULT_ERROR_RATE: "0"
+  FAULT_EXTRA_LATENCY_MS: "0"
+  UPSTREAM_TTFT_TIMEOUT_S: "60"
+  UPSTREAM_TOTAL_TIMEOUT_S: "180"
+  OTEL_METRIC_EXPORT_INTERVAL: "10000"
+  # Histogram buckets (seconds / tokens / notional USD). Tuned for CPU inference.
+  GW_BUCKETS_TTFT: "0.1,0.25,0.5,0.75,1,1.5,2,3,5,7.5,10,15,20,30"
+  GW_BUCKETS_TPOT: "0.01,0.025,0.05,0.1,0.15,0.2,0.3,0.4,0.5,0.75,1,2.5"
+---
+# Cost model. ASSUMPTIONS, NOT REAL PRICES (see README "Cost assumptions").
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: llm-gateway-cost-model
+  namespace: llm
+data:
+  cost-model.yaml: |
+    currency: USD
+    amortized:
+      node_cost_per_hour: 0.40     # a 4 vCPU / 16 GB cloud VM, on-demand, rounded
+    per_token:
+      input_per_1k: 0.00015        # marketplace-style price for a small model
+      output_per_1k: 0.0006
+---
+# System prompt prepended to every request that has none. `make break-quality` swaps it for
+# chaos/system-prompt-bad.txt.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: llm-gateway-system-prompt
+  namespace: llm
+data:
+  system-prompt.txt: |
+    You are a concise, accurate assistant. Answer directly. When asked for JSON, reply with
+    valid JSON only and nothing else. Refuse politely if asked for something harmful.
