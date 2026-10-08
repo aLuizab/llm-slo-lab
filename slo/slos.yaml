@@ -63,8 +63,10 @@ slos:
       faults are bad events.
     # Synthetic evaluator traffic (llm_slo_client="evaluator") is excluded from the user-facing
     # SLIs; it has its own SLI (quality).
+    # `or vector(0)`: when there are no good events at all the SLI must be 0, not "no data"
+    # (an empty `good` would make 1 - good/total empty and silence the alert).
     sli:
-      good: sum(rate(llm_slo_requests_total{llm_slo_outcome="success", llm_slo_client!="evaluator"}[{window}]))
+      good: (sum(rate(llm_slo_requests_total{llm_slo_outcome="success", llm_slo_client!="evaluator"}[{window}])) or vector(0))
       total: sum(rate(llm_slo_requests_total{llm_slo_client!="evaluator"}[{window}]))
 
   - name: responsiveness
@@ -74,8 +76,8 @@ slos:
       token are counted here; failures are already bad events for availability.
     sli:
       good: >-
-        sum(rate(gen_ai_server_time_to_first_token_seconds_bucket{le="{ttft_threshold_s}",
-        llm_slo_client!="evaluator"}[{window}]))
+        (sum(rate(gen_ai_server_time_to_first_token_seconds_bucket{le="{ttft_threshold_s}",
+        llm_slo_client!="evaluator"}[{window}])) or vector(0))
       total: sum(rate(gen_ai_server_time_to_first_token_seconds_count{llm_slo_client!="evaluator"}[{window}]))
 
   - name: throughput
@@ -85,9 +87,9 @@ slos:
       first token.
     sli:
       good: >-
-        sum(rate(llm_slo_output_tokens_per_second_count{llm_slo_client!="evaluator"}[{window}]))
-        - sum(rate(llm_slo_output_tokens_per_second_bucket{le="{tokens_per_s_threshold}",
-        llm_slo_client!="evaluator"}[{window}]))
+        (sum(rate(llm_slo_output_tokens_per_second_count{llm_slo_client!="evaluator"}[{window}]))
+        - (sum(rate(llm_slo_output_tokens_per_second_bucket{le="{tokens_per_s_threshold}",
+        llm_slo_client!="evaluator"}[{window}])) or vector(0)))
       total: sum(rate(llm_slo_output_tokens_per_second_count{llm_slo_client!="evaluator"}[{window}]))
     # With a 90% objective the error budget is 10%, so a burn rate above 10x is impossible
     # (it would need more than 100% bad events). 14.4x/6x become 8x/5x.
@@ -106,7 +108,7 @@ slos:
       JSON matching a schema, refusal when required, length cap. A proxy for quality, not a
       measure of it (see README limitations).
     sli:
-      good: sum(rate(llm_slo_eval_checks_total{llm_slo_eval_result="pass"}[{window}]))
+      good: (sum(rate(llm_slo_eval_checks_total{llm_slo_eval_result="pass"}[{window}])) or vector(0))
       total: sum(rate(llm_slo_eval_checks_total[{window}]))
     # Same 10% budget reasoning as throughput. Quality is a batch signal (a run every 2 min),
     # so a 5-minute window holds 2-3 runs; one pair at 5x is enough, 8x would need >80% of

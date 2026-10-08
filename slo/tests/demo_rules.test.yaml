@@ -173,3 +173,32 @@ tests:
                 [DEMO] cost per 1k requests is 4.00 USD, budget 1.5
                 (amortized model; assumptions, not real prices)
               runbook: docs/framework.md
+
+  # ---------------------------------------------------------------- no good events at all
+  # Every request truncated: the SLI must be 0% (error ratio 1), not "no data", so the page fires.
+  - interval: 15s
+    input_series:
+      - series: 'llm_slo_requests_total{llm_slo_outcome="truncated"}'
+        values: "0+4x200"
+    promql_expr_test:
+      - expr: 'slodemo:sli_error:ratio_rate1m{sli="availability"}'
+        eval_time: 10m
+        exp_samples:
+          - labels: 'slodemo:sli_error:ratio_rate1m{sli="availability", slo_mode="demo", slo_profile="cpu"}'
+            value: 1
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: LLMAvailabilityBurnRatePageDemo
+        exp_alerts:
+          - exp_labels:
+              severity: page
+              sli: availability
+              slo_mode: demo
+              slo_profile: cpu
+            exp_annotations:
+              summary: "[DEMO] availability SLO (99%) is burning error budget at 100.0x"
+              description: >-
+                Windows 3m/1m at 14.4x or 6m/2m at 6x (demo windows). A request is good when the
+                gateway returns a non-error, non-empty, non-truncated response. Upstream errors,
+                timeouts, empty bodies, truncation at max_tokens and injected faults are bad events.
+              runbook: docs/framework.md

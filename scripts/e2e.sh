@@ -18,8 +18,10 @@ kubectl -n $NS rollout status deploy/llm-gateway --timeout=180s
 for _ in $(seq 1 30); do curl -fs http://127.0.0.1:30080/v1/models >/dev/null && break; sleep 2; done
 curl -fs http://127.0.0.1:30080/v1/models | jq -c .
 
+# max_tokens must exceed mock-llm's answer length (60 tokens): an answer cut at max_tokens is a
+# *truncated* bad event, and 100% bad traffic would make the break-errors assertion vacuous.
 say "load: 60 s at concurrency 2"
-(cd loadgen && uv run --frozen python loadgen.py --url http://127.0.0.1:30080 --concurrency 2 --duration 60 --max-tokens 32 --report-every 30)
+(cd loadgen && uv run --frozen python loadgen.py --url http://127.0.0.1:30080 --concurrency 2 --duration 60 --max-tokens 128 --report-every 30)
 
 kubectl -n observability port-forward svc/kube-prometheus-stack-prometheus 19090:9090 >/dev/null 2>&1 & pf=$!
 trap 'kill $pf 2>/dev/null' EXIT
@@ -37,7 +39,7 @@ done
 [ $fail -eq 1 ] && { echo "missing metrics" >&2; exit 1; }
 # Sustained load for the rest of the check: a 1-minute rate window is empty without traffic,
 # so recording rules and alerts can only be asserted while requests are flowing.
-(cd loadgen && uv run --frozen python loadgen.py --url http://127.0.0.1:30080 --concurrency 2 --duration 600 --max-tokens 32 --report-every 60 > /tmp/e2e-loadgen.log 2>&1) & lg=$!
+(cd loadgen && uv run --frozen python loadgen.py --url http://127.0.0.1:30080 --concurrency 2 --duration 600 --max-tokens 128 --report-every 60 > /tmp/e2e-loadgen.log 2>&1) & lg=$!
 trap 'kill $pf $lg 2>/dev/null' EXIT
 
 say "assert: recording rules evaluate (the operator needs a minute to load a new PrometheusRule)"
