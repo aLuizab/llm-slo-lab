@@ -35,6 +35,11 @@ for m in 'sum(llm_slo_requests_total)' 'sum(gen_ai_server_time_to_first_token_se
   [ "$v" = "none" ] && fail=1
 done
 [ $fail -eq 1 ] && { echo "missing metrics" >&2; exit 1; }
+# Sustained load for the rest of the check: a 1-minute rate window is empty without traffic,
+# so recording rules and alerts can only be asserted while requests are flowing.
+(cd loadgen && uv run --frozen python loadgen.py --url http://127.0.0.1:30080 --concurrency 2 --duration 600 --max-tokens 32 --report-every 60 > /tmp/e2e-loadgen.log 2>&1) & lg=$!
+trap 'kill $pf $lg 2>/dev/null' EXIT
+
 say "assert: recording rules evaluate (the operator needs a minute to load a new PrometheusRule)"
 v=none
 for i in $(seq 1 18); do
@@ -46,7 +51,6 @@ echo "  availability error ratio (1m): $v"; [ "$v" != "none" ]
 
 say "break-errors, keep load flowing, wait for LLMAvailabilityBurnRatePageDemo"
 scripts/chaos.sh break-errors
-(cd loadgen && uv run --frozen python loadgen.py --url http://127.0.0.1:30080 --concurrency 2 --duration 300 --max-tokens 32 --report-every 60 > /tmp/e2e-loadgen.log 2>&1) & lg=$!
 fired=""
 for i in $(seq 1 24); do
   state=$(curl -fs http://127.0.0.1:19090/api/v1/alerts | jq -r '[.data.alerts[] | select(.labels.alertname=="LLMAvailabilityBurnRatePageDemo") | .state] | index("firing") // "no"')
