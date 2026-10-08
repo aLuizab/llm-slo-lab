@@ -66,7 +66,9 @@ slos:
     # `or vector(0)`: when there are no good events at all the SLI must be 0, not "no data"
     # (an empty `good` would make 1 - good/total empty and silence the alert).
     sli:
-      good: (sum(rate(llm_slo_requests_total{llm_slo_outcome="success", llm_slo_client!="evaluator"}[{window}])) or vector(0))
+      good: >-
+        (sum(rate(llm_slo_requests_total{llm_slo_outcome="success", llm_slo_client!="evaluator"}[{window}]))
+        or vector(0))
       total: sum(rate(llm_slo_requests_total{llm_slo_client!="evaluator"}[{window}]))
 
   - name: responsiveness
